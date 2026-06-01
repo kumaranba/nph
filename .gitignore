@@ -1,0 +1,28 @@
+# Python / Django
+venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+/staticfiles/
+.pytest_cache/
+
+# Environment
+.env
+.env.*.local
+
+# Node / Next.js (frontend has its own .gitignore too)
+node_modules/
+.next/
+out/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# OS / editors
+.DS_Store
+*.swp
+.idea/
+.vscode/

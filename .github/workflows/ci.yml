@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root1234
+          MYSQL_DATABASE: nph
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot1234 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DJANGO_SECRET_KEY: ci-secret-key
+      DB_NAME: nph
+      DB_USER: root
+      DB_PASSWORD: root1234
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: pytest
+
+  e2e-tests:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root1234
+          MYSQL_DATABASE: nph
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot1234 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DJANGO_SECRET_KEY: ci-secret-key
+      DB_NAME: nph
+      DB_USER: root
+      DB_PASSWORD: root1234
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      NEXT_PUBLIC_GRAPHQL_ENDPOINT: http://localhost:8000/graphql/
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Backend: migrate, seed, and serve -----------------------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+
+      - name: Migrate database and seed test user
+        run: |
+          python manage.py migrate --noinput
+          python manage.py shell -c "from api.models import User, UserRole; User.objects.filter(email='admin@nph.test').exists() or User.objects.create_user(email='admin@nph.test', password='secret123', role=UserRole.ADMIN)"
+
+      - name: Start Django backend
+        run: |
+          python manage.py runserver 0.0.0.0:8000 --noreload &
+          echo "Waiting for Django to accept GraphQL requests..."
+          for i in $(seq 1 30); do
+            if curl -sf -X POST http://localhost:8000/graphql/ \
+                 -H "Content-Type: application/json" \
+                 -d '{"query":"{ __typename }"}' >/dev/null; then
+              echo "Django is up."; exit 0
+            fi
+            sleep 2
+          done
+          echo "Django failed to start in time." >&2
+          exit 1
+
+      # --- Frontend: install, browsers, run e2e --------------------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
