@@ -1,18 +1,17 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import List, Optional
 
 import strawberry
-from django.db import transaction
+from django.db.models import Q
 from graphql import GraphQLError
 from strawberry.types import Info
 from strawberry_django.optimizer import DjangoOptimizerExtension
 
 from . import auth
 from .models import (
-    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Invoice,
-    InvoiceStatus, Patient, Payment, Room, User, UserRole, VitalReading,
-    VitalsThreshold,
+    AdditionalCharge, Admission, AdmissionStatus, Bed, Invoice, InvoiceStatus,
+    Patient, Payment, Room, User, UserRole, VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
@@ -31,42 +30,50 @@ class AuthTokens:
     refresh_token: str
 
 
+# Number of days before an invoice's period end that we flag it "due soon".
+DUE_SOON_WINDOW_DAYS = 7
+
+
 @strawberry.type
-class DischargeResult:
-    """Outcome of a discharge.
+class PatientSearchResult:
+    """A flattened patient row for the search results table.
 
-    ``has_outstanding_dues`` is the warning flag the UI surfaces in red when
-    the patient still has unpaid or partially-paid invoices at discharge time.
+    ``admission_date``/``room``/``bed`` come from the patient's current (or
+    most recent) admission; ``fee_status`` is derived from their latest
+    invoice and is one of CURRENT / DUE_SOON / OVERDUE.
     """
-    admission: 'AdmissionType'
-    has_outstanding_dues: bool
-    outstanding_invoice_count: int
-    refund_amount: Decimal
-
-
-# ---------------------------------------------------------------------------
-# Mutation inputs
-# ---------------------------------------------------------------------------
-
-@strawberry.input
-class CreateAdmissionInput:
-    """Everything needed to register a new patient and admit them to a bed.
-
-    The patient record is created as part of the same operation, so callers
-    pass the patient's details inline rather than an existing patient id.
-    """
-    # Patient details
+    id: strawberry.ID
+    patient_id: str
     name: str
-    age: int
-    diagnosis: str
-    admitting_doctor: str
-    # Admission details
-    bed_id: strawberry.ID
-    admission_date: date
-    monthly_fee: Decimal
-    # Optional patient details
-    guardian_name: Optional[str] = ""
-    guardian_phone: Optional[str] = ""
+    guardian_name: str
+    guardian_phone: str
+    admission_date: Optional[date]
+    room: Optional[str]
+    bed: Optional[str]
+    fee_status: str
+
+
+def _fee_status_for_patient(patient) -> str:
+    """Derive a fee status from the patient's latest invoice.
+
+    No invoice or a fully-paid latest invoice is CURRENT. Otherwise an unpaid
+    or partial invoice is OVERDUE once its billing period has ended, DUE_SOON
+    within the next week, and CURRENT before that.
+    """
+    invoice = (
+        Invoice.objects.filter(admission__patient=patient)
+        .order_by('-billing_period_end')
+        .first()
+    )
+    if invoice is None or invoice.status == InvoiceStatus.PAID:
+        return 'CURRENT'
+
+    today = date.today()
+    if invoice.billing_period_end < today:
+        return 'OVERDUE'
+    if invoice.billing_period_end <= today + timedelta(days=DUE_SOON_WINDOW_DAYS):
+        return 'DUE_SOON'
+    return 'CURRENT'
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +134,54 @@ class Query:
     @login_required
     def patient(self, info: Info, pk: strawberry.ID) -> Optional[PatientType]:
         return Patient.objects.filter(pk=pk).first()
+
+    # Fuzzy patient search across name, patient_id, guardian name and phone.
+    # Open to any authenticated role. Each result carries the patient's current
+    # admission (date/room/bed) and a derived fee status.
+    @strawberry.field
+    @login_required
+    def search_patients(self, info: Info, query: str) -> List[PatientSearchResult]:
+        term = query.strip()
+        if not term:
+            return []
+
+        patients = (
+            Patient.objects.filter(
+                Q(name__icontains=term)
+                | Q(patient_id__icontains=term)
+                | Q(guardian_name__icontains=term)
+                | Q(guardian_phone__icontains=term)
+            )
+            .distinct()
+            .order_by('name')
+        )
+
+        results: List[PatientSearchResult] = []
+        for patient in patients:
+            # Prefer the active admission; fall back to the most recent one.
+            admission = (
+                patient.admissions.filter(status=AdmissionStatus.ACTIVE)
+                .select_related('bed__room')
+                .order_by('-admission_date')
+                .first()
+                or patient.admissions.select_related('bed__room')
+                .order_by('-admission_date')
+                .first()
+            )
+            results.append(
+                PatientSearchResult(
+                    id=patient.id,
+                    patient_id=patient.patient_id,
+                    name=patient.name,
+                    guardian_name=patient.guardian_name,
+                    guardian_phone=patient.guardian_phone,
+                    admission_date=admission.admission_date if admission else None,
+                    room=admission.bed.room.name if admission else None,
+                    bed=admission.bed.label if admission else None,
+                    fee_status=_fee_status_for_patient(patient),
+                )
+            )
+        return results
 
     @strawberry.field
     @login_required
