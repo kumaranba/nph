@@ -143,3 +143,10 @@ JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
 JWT_ALGORITHM = 'HS256'
 JWT_ACCESS_TOKEN_LIFETIME = timedelta(minutes=int(os.environ.get('JWT_ACCESS_MINUTES', '15')))
 JWT_REFRESH_TOKEN_LIFETIME = timedelta(days=int(os.environ.get('JWT_REFRESH_DAYS', '7')))
+
+# ---------------------------------------------------------------------------
+# Billing
+# ---------------------------------------------------------------------------
+# Default look-ahead window (in days) for the "fees due" list when a caller
+# does not pass an explicit withinDays.
+FEE_DUE_WARNING_DAYS = int(os.environ.get('FEE_DUE_WARNING_DAYS', '7'))
