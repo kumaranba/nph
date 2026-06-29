@@ -20,6 +20,8 @@ type Admission = {
   id: string;
   status: string;
   admissionDate: string;
+  hasOutstandingDues: boolean;
+  outstandingInvoiceCount: number;
   bed: { id: string; label: string; room: { id: string; name: string } };
 };
 
@@ -135,6 +137,8 @@ export default function PatientProfilePage() {
           patientId={patient.id}
           patientName={patient.name}
           role={role}
+          hasOutstandingDues={activeAdmission.hasOutstandingDues}
+          outstandingInvoiceCount={activeAdmission.outstandingInvoiceCount}
           onClose={() => setShowDischarge(false)}
         />
       ) : null}

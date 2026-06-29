@@ -28,6 +28,9 @@ type Props = {
   patientName: string;
   /** Current user's role; the refund field is only shown to FINANCE. */
   role: string;
+  /** Outstanding-dues state, known before discharge so we can warn upfront. */
+  hasOutstandingDues: boolean;
+  outstandingInvoiceCount: number;
   onClose: () => void;
 };
 
@@ -36,6 +39,8 @@ export function DischargeModal({
   patientId,
   patientName,
   role,
+  hasOutstandingDues,
+  outstandingInvoiceCount,
   onClose,
 }: Props) {
   const isFinance = role === "FINANCE";
@@ -94,24 +99,12 @@ export function DischargeModal({
         {done ? (
           // --- Post-discharge summary --------------------------------------
           <div className="mt-4 space-y-4">
-            {result!.hasOutstandingDues ? (
-              <div className="rounded-md border border-red-300 bg-red-50 p-3">
-                <p className="text-sm font-medium text-red-700">
-                  Outstanding dues
-                </p>
-                <p className="text-sm text-red-600">
-                  This patient still has {result!.outstandingInvoiceCount} unpaid
-                  invoice
-                  {result!.outstandingInvoiceCount === 1 ? "" : "s"}. Discharge
-                  completed — please follow up on billing.
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-green-700">
-                Patient discharged. No outstanding dues.
-              </p>
-            )}
-
+            <p className="text-sm text-green-700">
+              Patient discharged
+              {result!.hasOutstandingDues
+                ? " — please follow up on the outstanding balance."
+                : "."}
+            </p>
             <Button className="w-full" onClick={onClose}>
               Done
             </Button>
@@ -119,6 +112,20 @@ export function DischargeModal({
         ) : (
           // --- Discharge form ----------------------------------------------
           <form onSubmit={handleSubmit(onSubmit)} className="mt-4 space-y-4">
+            {/* Warn about outstanding dues BEFORE the discharge is confirmed. */}
+            {hasOutstandingDues ? (
+              <div className="rounded-md border border-red-300 bg-red-50 p-3">
+                <p className="text-sm font-medium text-red-700">
+                  Outstanding dues
+                </p>
+                <p className="text-sm text-red-600">
+                  This patient has {outstandingInvoiceCount} unpaid invoice
+                  {outstandingInvoiceCount === 1 ? "" : "s"}. Discharging now
+                  will leave the balance outstanding.
+                </p>
+              </div>
+            ) : null}
+
             {isFinance ? (
               <div className="space-y-2">
                 <Label htmlFor="refundAmount">Refund amount (optional)</Label>

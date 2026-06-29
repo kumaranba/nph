@@ -133,6 +133,29 @@ def test_admin_cannot_record_refund(admin_client, admission):
     assert admission.bed.status == BedStatus.OCCUPIED
 
 
+ADMISSION_DUES = """
+query Admission($pk: ID!) {
+  admission(pk: $pk) {
+    hasOutstandingDues
+    outstandingInvoiceCount
+  }
+}
+"""
+
+
+def test_admission_exposes_outstanding_dues_before_discharge(admin_client, admission):
+    # No invoices yet — no dues.
+    before = admin_client.execute(ADMISSION_DUES, {"pk": str(admission.id)})
+    assert before["data"]["admission"]["hasOutstandingDues"] is False
+    assert before["data"]["admission"]["outstandingInvoiceCount"] == 0
+
+    _unpaid_invoice(admission)
+
+    after = admin_client.execute(ADMISSION_DUES, {"pk": str(admission.id)})
+    assert after["data"]["admission"]["hasOutstandingDues"] is True
+    assert after["data"]["admission"]["outstandingInvoiceCount"] == 1
+
+
 def test_nurse_cannot_discharge(nurse_client, admission):
     result = nurse_client.execute(
         DISCHARGE, {"admissionId": str(admission.id), "refundAmount": None}

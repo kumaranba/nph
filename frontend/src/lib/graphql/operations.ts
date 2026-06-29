@@ -69,6 +69,8 @@ export const PATIENT = gql`
         id
         status
         admissionDate
+        hasOutstandingDues
+        outstandingInvoiceCount
         bed {
           id
           label
