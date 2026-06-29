@@ -52,7 +52,7 @@ export const CREATE_ADMISSION = gql`
   }
 `;
 
-// A single patient, used by the post-admission profile page.
+// A single patient (with admissions), used by the patient profile page.
 export const PATIENT = gql`
   query Patient($pk: ID!) {
     patient(pk: $pk) {
@@ -65,6 +65,34 @@ export const PATIENT = gql`
       guardianPhone
       admittingDoctor
       createdAt
+      admissions {
+        id
+        status
+        admissionDate
+        bed {
+          id
+          label
+          room {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const DISCHARGE_PATIENT = gql`
+  mutation DischargePatient($admissionId: ID!, $refundAmount: Decimal) {
+    dischargePatient(admissionId: $admissionId, refundAmount: $refundAmount) {
+      hasOutstandingDues
+      outstandingInvoiceCount
+      refundAmount
+      admission {
+        id
+        status
+        dischargeDate
+      }
     }
   }
 `;

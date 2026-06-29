@@ -150,6 +150,8 @@ class Admission(models.Model):
         max_length=15, choices=DischargeType.choices, blank=True
     )
     discharge_notes = models.TextField(blank=True)
+    # Refund recorded at discharge time. Finance-only; defaults to 0.
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def __str__(self):
         return f'Admission #{self.pk} — {self.patient.name} ({self.status})'

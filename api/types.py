@@ -39,6 +39,7 @@ class PatientType:
     guardian_phone: auto
     admitting_doctor: auto
     created_at: auto
+    admissions: list['AdmissionType']
 
 
 @strawberry_django.type(models.Admission)
@@ -52,6 +53,7 @@ class AdmissionType:
     discharge_date: auto
     discharge_type: auto
     discharge_notes: auto
+    refund_amount: auto
 
 
 @strawberry_django.type(models.Invoice)

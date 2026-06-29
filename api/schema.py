@@ -11,7 +11,8 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 from . import auth
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Invoice,
-    Patient, Payment, Room, User, UserRole, VitalReading, VitalsThreshold,
+    InvoiceStatus, Patient, Payment, Room, User, UserRole, VitalReading,
+    VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
@@ -28,6 +29,19 @@ from .types import (
 class AuthTokens:
     access_token: str
     refresh_token: str
+
+
+@strawberry.type
+class DischargeResult:
+    """Outcome of a discharge.
+
+    ``has_outstanding_dues`` is the warning flag the UI surfaces in red when
+    the patient still has unpaid or partially-paid invoices at discharge time.
+    """
+    admission: 'AdmissionType'
+    has_outstanding_dues: bool
+    outstanding_invoice_count: int
+    refund_amount: Decimal
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +245,68 @@ class Mutation:
             bed.save(update_fields=['status'])
 
         return admission
+
+    # Discharge a patient: mark the admission DISCHARGED and free the bed.
+    # ADMIN and FINANCE may discharge (NURSE may not). Only FINANCE may attach
+    # a refund_amount. Returns a warning flag when the patient still has
+    # outstanding (unpaid/partial) invoices.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def discharge_patient(
+        self,
+        info: Info,
+        admission_id: strawberry.ID,
+        refund_amount: Optional[Decimal] = None,
+        discharge_type: Optional[str] = None,
+        discharge_notes: Optional[str] = None,
+    ) -> DischargeResult:
+        user = info.context.request.user
+
+        # A refund may only be recorded by Finance.
+        if refund_amount is not None:
+            if user.role != UserRole.FINANCE:
+                raise GraphQLError('Only Finance can record a refund on discharge.')
+            if refund_amount < 0:
+                raise GraphQLError('Refund amount cannot be negative.')
+
+        with transaction.atomic():
+            try:
+                admission = (
+                    Admission.objects.select_for_update()
+                    .select_related('bed')
+                    .get(pk=admission_id)
+                )
+            except Admission.DoesNotExist:
+                raise GraphQLError('Admission not found.')
+
+            if admission.status == AdmissionStatus.DISCHARGED:
+                raise GraphQLError('Patient is already discharged.')
+
+            outstanding_count = admission.invoices.filter(
+                status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+            ).count()
+
+            admission.status = AdmissionStatus.DISCHARGED
+            admission.discharge_date = date.today()
+            if discharge_type:
+                admission.discharge_type = discharge_type
+            if discharge_notes:
+                admission.discharge_notes = discharge_notes
+            if refund_amount is not None:
+                admission.refund_amount = refund_amount
+            admission.save()
+
+            # Free the bed.
+            bed = admission.bed
+            bed.status = BedStatus.VACANT
+            bed.save(update_fields=['status'])
+
+        return DischargeResult(
+            admission=admission,
+            has_outstanding_dues=outstanding_count > 0,
+            outstanding_invoice_count=outstanding_count,
+            refund_amount=admission.refund_amount,
+        )
 
 
 schema = strawberry.Schema(
