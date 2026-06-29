@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 import strawberry
 import strawberry_django
+from django.db.models import Sum
 from strawberry import auto
 from . import models
 from .models import InvoiceStatus
@@ -80,6 +83,28 @@ class InvoiceType:
     refund_amount: auto
     total_due: auto
     status: auto
+
+    # The charge line items billed in this invoice's period.
+    @strawberry.field
+    def additional_charges(self) -> list['AdditionalChargeType']:
+        return self.admission.additional_charges.filter(
+            charge_date__gte=self.billing_period_start,
+            charge_date__lte=self.billing_period_end,
+        ).order_by('charge_date')
+
+    # Payment history against this invoice, oldest first.
+    @strawberry.field
+    def payments(self) -> list['PaymentType']:
+        return self.payments.order_by('paid_on')
+
+    @strawberry.field
+    def amount_paid(self) -> Decimal:
+        return self.payments.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+    @strawberry.field
+    def balance_due(self) -> Decimal:
+        paid = self.payments.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        return self.total_due - (self.refund_amount or Decimal('0')) - paid
 
 
 @strawberry_django.type(models.Payment)
