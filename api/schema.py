@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 import strawberry
+from django.db import transaction
 from django.db.models import Q
 from graphql import GraphQLError
 from strawberry.types import Info
@@ -10,8 +11,9 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 
 from . import auth
 from .models import (
-    AdditionalCharge, Admission, AdmissionStatus, Bed, Invoice, InvoiceStatus,
-    Patient, Payment, Room, User, UserRole, VitalReading, VitalsThreshold,
+    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Invoice,
+    InvoiceStatus, Patient, Payment, Room, User, UserRole, VitalReading,
+    VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
@@ -28,6 +30,40 @@ from .types import (
 class AuthTokens:
     access_token: str
     refresh_token: str
+
+
+@strawberry.type
+class DischargeResult:
+    """Outcome of a discharge.
+
+    ``has_outstanding_dues`` is the warning flag the UI surfaces in red when
+    the patient still has unpaid or partially-paid invoices at discharge time.
+    """
+    admission: 'AdmissionType'
+    has_outstanding_dues: bool
+    outstanding_invoice_count: int
+    refund_amount: Decimal
+
+
+@strawberry.input
+class CreateAdmissionInput:
+    """Everything needed to register a new patient and admit them to a bed.
+
+    The patient record is created as part of the same operation, so callers
+    pass the patient's details inline rather than an existing patient id.
+    """
+    # Patient details
+    name: str
+    age: int
+    diagnosis: str
+    admitting_doctor: str
+    # Admission details
+    bed_id: strawberry.ID
+    admission_date: date
+    monthly_fee: Decimal
+    # Optional patient details
+    guardian_name: Optional[str] = ""
+    guardian_phone: Optional[str] = ""
 
 
 # Number of days before an invoice's period end that we flag it "due soon".
