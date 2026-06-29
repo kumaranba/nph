@@ -2,6 +2,10 @@ import strawberry
 import strawberry_django
 from strawberry import auto
 from . import models
+from .models import InvoiceStatus
+
+# Invoice statuses that count as money still owed.
+_OUTSTANDING_STATUSES = [InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
 
 
 @strawberry_django.type(models.User)
@@ -39,6 +43,7 @@ class PatientType:
     guardian_phone: auto
     admitting_doctor: auto
     created_at: auto
+    admissions: list['AdmissionType']
 
 
 @strawberry_django.type(models.Admission)
@@ -52,6 +57,17 @@ class AdmissionType:
     discharge_date: auto
     discharge_type: auto
     discharge_notes: auto
+    refund_amount: auto
+
+    # Outstanding-dues info, computed from the admission's invoices. Lets the
+    # UI warn about unpaid balances before a discharge is confirmed.
+    @strawberry.field
+    def outstanding_invoice_count(self) -> int:
+        return self.invoices.filter(status__in=_OUTSTANDING_STATUSES).count()
+
+    @strawberry.field
+    def has_outstanding_dues(self) -> bool:
+        return self.invoices.filter(status__in=_OUTSTANDING_STATUSES).exists()
 
 
 @strawberry_django.type(models.Invoice)

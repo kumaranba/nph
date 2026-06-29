@@ -18,3 +18,83 @@ export const ME = gql`
     }
   }
 `;
+
+// Only vacant beds — used to populate the admission form's bed picker.
+export const VACANT_BEDS = gql`
+  query VacantBeds {
+    beds(status: "VACANT") {
+      id
+      label
+      room {
+        id
+        name
+      }
+    }
+  }
+`;
+
+export const CREATE_ADMISSION = gql`
+  mutation CreateAdmission($input: CreateAdmissionInput!) {
+    createAdmission(input: $input) {
+      id
+      status
+      patient {
+        id
+        patientId
+        name
+      }
+      bed {
+        id
+        label
+        status
+      }
+    }
+  }
+`;
+
+// A single patient (with admissions), used by the patient profile page.
+export const PATIENT = gql`
+  query Patient($pk: ID!) {
+    patient(pk: $pk) {
+      id
+      patientId
+      name
+      age
+      diagnosis
+      guardianName
+      guardianPhone
+      admittingDoctor
+      createdAt
+      admissions {
+        id
+        status
+        admissionDate
+        hasOutstandingDues
+        outstandingInvoiceCount
+        bed {
+          id
+          label
+          room {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const DISCHARGE_PATIENT = gql`
+  mutation DischargePatient($admissionId: ID!, $refundAmount: Decimal) {
+    dischargePatient(admissionId: $admissionId, refundAmount: $refundAmount) {
+      hasOutstandingDues
+      outstandingInvoiceCount
+      refundAmount
+      admission {
+        id
+        status
+        dischargeDate
+      }
+    }
+  }
+`;
