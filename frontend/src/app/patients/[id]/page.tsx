@@ -105,6 +105,20 @@ export default function PatientProfilePage() {
                 />
               </dl>
 
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  router.push(
+                    `/patients/${patient.id}/invoices/${new Date()
+                      .toISOString()
+                      .slice(0, 7)}`
+                  )
+                }
+              >
+                View current invoice
+              </Button>
+
               {activeAdmission && canDischarge ? (
                 <Button
                   variant="destructive"

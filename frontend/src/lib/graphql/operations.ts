@@ -100,6 +100,54 @@ export const PATIENT = gql`
   }
 `;
 
+// A single invoice for a patient + billing month ("YYYY-MM").
+export const INVOICE = gql`
+  query Invoice($patientId: ID!, $period: String!) {
+    invoice(patientId: $patientId, period: $period) {
+      id
+      billingPeriodStart
+      billingPeriodEnd
+      baseFee
+      refundAmount
+      totalDue
+      amountPaid
+      balanceDue
+      status
+      admission {
+        id
+        patient {
+          id
+          patientId
+          name
+        }
+      }
+      additionalCharges {
+        id
+        category
+        amount
+        chargeDate
+        description
+      }
+      payments {
+        id
+        amount
+        paidOn
+      }
+    }
+  }
+`;
+
+export const LOG_PAYMENT = gql`
+  mutation LogPayment($invoiceId: ID!, $amount: Decimal!, $paidOn: Date!) {
+    logPayment(invoiceId: $invoiceId, amount: $amount, paidOn: $paidOn) {
+      id
+      status
+      amountPaid
+      balanceDue
+    }
+  }
+`;
+
 export const DISCHARGE_PATIENT = gql`
   mutation DischargePatient($admissionId: ID!, $refundAmount: Decimal) {
     dischargePatient(admissionId: $admissionId, refundAmount: $refundAmount) {
