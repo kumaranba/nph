@@ -18,3 +18,19 @@ export const ME = gql`
     }
   }
 `;
+
+export const SEARCH_PATIENTS = gql`
+  query SearchPatients($query: String!) {
+    searchPatients(query: $query) {
+      id
+      patientId
+      name
+      guardianName
+      guardianPhone
+      admissionDate
+      room
+      bed
+      feeStatus
+    }
+  }
+`;
