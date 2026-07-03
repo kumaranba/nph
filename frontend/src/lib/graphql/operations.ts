@@ -137,18 +137,33 @@ export const DELETE_CHARGE = gql`
   }
 `;
 
-// Patients whose next billing cycle date falls within `withinDays` of today.
-// Pass null to use the server's feeDueWarningDays default.
-export const FEES_DUE_LIST = gql`
-  query FeesDueList($withinDays: Int) {
-    feesDueList(withinDays: $withinDays) {
+export const CREATE_VITAL_READING = gql`
+  mutation CreateVitalReading(
+    $admissionId: ID!
+    $session: VitalSessionEnum!
+    $bpSystolic: Int!
+    $bpDiastolic: Int!
+    $pulse: Int!
+    $temperature: Decimal!
+    $spo2: Int!
+    $weight: Decimal
+    $notes: String
+  ) {
+    createVitalReading(
+      admissionId: $admissionId
+      session: $session
+      bpSystolic: $bpSystolic
+      bpDiastolic: $bpDiastolic
+      pulse: $pulse
+      temperature: $temperature
+      spo2: $spo2
+      weight: $weight
+      notes: $notes
+    ) {
       id
-      patientId
-      name
-      room
-      dueDate
-      amountDue
-      daysUntilDue
+      hasFlag
+      flaggedVitals
+      recordedAt
     }
   }
 `;
