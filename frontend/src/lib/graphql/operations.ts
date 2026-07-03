@@ -137,6 +137,22 @@ export const DELETE_CHARGE = gql`
   }
 `;
 
+// Patients whose next billing cycle date falls within `withinDays` of today.
+// Pass null to use the server's feeDueWarningDays default.
+export const FEES_DUE_LIST = gql`
+  query FeesDueList($withinDays: Int) {
+    feesDueList(withinDays: $withinDays) {
+      id
+      patientId
+      name
+      room
+      dueDate
+      amountDue
+      daysUntilDue
+    }
+  }
+`;
+
 // A single invoice for a patient + billing month ("YYYY-MM").
 export const INVOICE = gql`
   query Invoice($patientId: ID!, $period: String!) {

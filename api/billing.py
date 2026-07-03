@@ -34,6 +34,20 @@ class BillingService:
         return date(year, month, min(admission_date.day, last_day))
 
     @classmethod
+    def next_billing_cycle_date(cls, admission_date: date, as_of: date) -> date:
+        """The next billing cycle date on or after ``as_of``.
+
+        If ``as_of`` is itself a cycle date, it is returned (billing is due
+        that day). Otherwise the next monthly cycle date is returned.
+        """
+        candidate = cls.get_billing_cycle_date(admission_date, as_of.month, as_of.year)
+        if candidate >= as_of:
+            return candidate
+        next_year = as_of.year + 1 if as_of.month == 12 else as_of.year
+        next_month = 1 if as_of.month == 12 else as_of.month + 1
+        return cls.get_billing_cycle_date(admission_date, next_month, next_year)
+
+    @classmethod
     def _period_for(cls, admission_date: date, as_of: date):
         """Return ``(start, end)`` of the billing period containing ``as_of``."""
         start = cls.get_billing_cycle_date(admission_date, as_of.month, as_of.year)

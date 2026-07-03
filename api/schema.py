@@ -4,8 +4,9 @@ from enum import Enum
 from typing import List, Optional
 
 import strawberry
+from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from graphql import GraphQLError
 from strawberry.types import Info
 from strawberry_django.optimizer import DjangoOptimizerExtension
@@ -80,6 +81,23 @@ class CreateAdmissionInput:
 
 # Number of days before an invoice's period end that we flag it "due soon".
 DUE_SOON_WINDOW_DAYS = 7
+
+
+def _today() -> date:
+    """Indirection so tests can pin "today" deterministically."""
+    return date.today()
+
+
+@strawberry.type
+class FeeDueItem:
+    """A patient with an upcoming billing cycle date, for the fees-due list."""
+    id: strawberry.ID          # patient primary key (for navigation)
+    patient_id: str            # NPH-YYYY-NNNN code
+    name: str
+    room: Optional[str]
+    due_date: date
+    amount_due: Decimal
+    days_until_due: int
 
 
 @strawberry.type
@@ -181,6 +199,62 @@ class Query:
         return Invoice.objects.filter(
             admission__patient_id=patient_id
         ).order_by('-billing_period_start')
+
+    # Active patients whose next billing cycle date falls within `within_days`
+    # of today, sorted by due date. Defaults to the feeDueWarningDays system
+    # setting. ADMIN + FINANCE only.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def fees_due_list(
+        self, info: Info, within_days: Optional[int] = None
+    ) -> List[FeeDueItem]:
+        if within_days is None:
+            within_days = settings.FEE_DUE_WARNING_DAYS
+        if within_days < 0:
+            raise GraphQLError('withinDays must be non-negative.')
+
+        today = _today()
+        items: List[FeeDueItem] = []
+        active = Admission.objects.filter(
+            status=AdmissionStatus.ACTIVE
+        ).select_related('patient', 'bed__room')
+
+        for admission in active:
+            due_date = BillingService.next_billing_cycle_date(
+                admission.admission_date, today
+            )
+            days_until_due = (due_date - today).days
+            if days_until_due > within_days:
+                continue
+
+            # Projected amount: the recurring fee plus any charges already
+            # logged for the upcoming billing period.
+            following = BillingService.next_billing_cycle_date(
+                admission.admission_date, due_date + timedelta(days=1)
+            )
+            charges = (
+                AdditionalCharge.objects.filter(
+                    admission=admission,
+                    charge_date__gte=due_date,
+                    charge_date__lte=following - timedelta(days=1),
+                ).aggregate(total=Sum('amount'))['total']
+                or Decimal('0')
+            )
+
+            items.append(
+                FeeDueItem(
+                    id=admission.patient.id,
+                    patient_id=admission.patient.patient_id,
+                    name=admission.patient.name,
+                    room=admission.bed.room.name,
+                    due_date=due_date,
+                    amount_due=admission.monthly_fee + charges,
+                    days_until_due=days_until_due,
+                )
+            )
+
+        items.sort(key=lambda item: item.due_date)
+        return items
 
     # --- ADMIN + NURSE (clinical data) -------------------------------------
     @strawberry.field
