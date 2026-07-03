@@ -95,8 +95,45 @@ export const PATIENT = gql`
             name
           }
         }
+        additionalCharges {
+          id
+          category
+          amount
+          chargeDate
+          description
+        }
       }
     }
+  }
+`;
+
+export const CREATE_CHARGE = gql`
+  mutation CreateCharge(
+    $admissionId: ID!
+    $category: ChargeCategoryEnum!
+    $amount: Decimal!
+    $chargeDate: Date!
+    $description: String
+  ) {
+    createCharge(
+      admissionId: $admissionId
+      category: $category
+      amount: $amount
+      chargeDate: $chargeDate
+      description: $description
+    ) {
+      id
+      category
+      amount
+      chargeDate
+      description
+    }
+  }
+`;
+
+export const DELETE_CHARGE = gql`
+  mutation DeleteCharge($chargeId: ID!) {
+    deleteCharge(chargeId: $chargeId)
   }
 `;
 

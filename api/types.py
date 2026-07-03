@@ -72,6 +72,11 @@ class AdmissionType:
     def has_outstanding_dues(self) -> bool:
         return self.invoices.filter(status__in=_OUTSTANDING_STATUSES).exists()
 
+    # Charge log for this admission, most recent first.
+    @strawberry.field
+    def additional_charges(self) -> list['AdditionalChargeType']:
+        return self.additional_charges.order_by('-charge_date', '-id')
+
 
 @strawberry_django.type(models.Invoice)
 class InvoiceType:
