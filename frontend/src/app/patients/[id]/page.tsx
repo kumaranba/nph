@@ -4,6 +4,10 @@ import { useQuery } from "@apollo/client";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import {
+  AdditionalChargesPanel,
+  type Charge,
+} from "@/components/additional-charges-panel";
 import { DischargeModal } from "@/components/discharge-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +27,7 @@ type Admission = {
   hasOutstandingDues: boolean;
   outstandingInvoiceCount: number;
   bed: { id: string; label: string; room: { id: string; name: string } };
+  additionalCharges: Charge[];
 };
 
 type PatientResult = {
@@ -68,15 +73,24 @@ export default function PatientProfilePage() {
 
   const patient = data?.patient;
   const role = meData?.me.role ?? "";
+  const isFinance = role === "FINANCE";
   const activeAdmission = patient?.admissions.find(
     (a) => a.status === "ACTIVE"
   );
   // ADMIN and FINANCE may discharge; NURSE may not.
   const canDischarge = role === "ADMIN" || role === "FINANCE";
+  // Show the charge log for the active admission, else the most recent one.
+  const chargesAdmission =
+    activeAdmission ??
+    (patient
+      ? [...patient.admissions].sort((a, b) =>
+          b.admissionDate.localeCompare(a.admissionDate)
+        )[0]
+      : undefined);
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-8">
-      <Card className="w-full max-w-md">
+    <main className="mx-auto min-h-screen w-full max-w-md space-y-6 p-8">
+      <Card>
         <CardHeader>
           <CardTitle>{patient ? patient.name : "Patient not found"}</CardTitle>
           {patient ? (
@@ -144,6 +158,16 @@ export default function PatientProfilePage() {
           </Button>
         </CardContent>
       </Card>
+
+      {patient && chargesAdmission ? (
+        <AdditionalChargesPanel
+          admissionId={chargesAdmission.id}
+          patientId={patient.id}
+          charges={chargesAdmission.additionalCharges}
+          isFinance={isFinance}
+          isActive={chargesAdmission.status === "ACTIVE"}
+        />
+      ) : null}
 
       {showDischarge && patient && activeAdmission ? (
         <DischargeModal
