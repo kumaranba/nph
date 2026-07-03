@@ -137,6 +137,37 @@ export const DELETE_CHARGE = gql`
   }
 `;
 
+export const CREATE_VITAL_READING = gql`
+  mutation CreateVitalReading(
+    $admissionId: ID!
+    $session: VitalSessionEnum!
+    $bpSystolic: Int!
+    $bpDiastolic: Int!
+    $pulse: Int!
+    $temperature: Decimal!
+    $spo2: Int!
+    $weight: Decimal
+    $notes: String
+  ) {
+    createVitalReading(
+      admissionId: $admissionId
+      session: $session
+      bpSystolic: $bpSystolic
+      bpDiastolic: $bpDiastolic
+      pulse: $pulse
+      temperature: $temperature
+      spo2: $spo2
+      weight: $weight
+      notes: $notes
+    ) {
+      id
+      hasFlag
+      flaggedVitals
+      recordedAt
+    }
+  }
+`;
+
 // A single invoice for a patient + billing month ("YYYY-MM").
 export const INVOICE = gql`
   query Invoice($patientId: ID!, $period: String!) {

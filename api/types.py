@@ -148,6 +148,13 @@ class VitalReadingType:
     notes: auto
     has_flag: auto
 
+    # The specific vitals that breached a threshold (e.g. ["SPO2", "PULSE"]),
+    # so the UI can say which reading is out of range.
+    @strawberry.field
+    def flagged_vitals(self) -> list[str]:
+        from .vitals import breached_vitals
+        return breached_vitals(self)
+
 
 @strawberry_django.type(models.VitalsThreshold)
 class VitalsThresholdType:
