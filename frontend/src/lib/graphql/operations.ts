@@ -181,6 +181,38 @@ export const VITAL_HISTORY = gql`
   }
 `;
 
+export const USERS = gql`
+  query Users {
+    users {
+      id
+      email
+      role
+      isActive
+      dateJoined
+    }
+  }
+`;
+
+export const CREATE_USER = gql`
+  mutation CreateUser($email: String!, $password: String!, $role: UserRoleEnum!) {
+    createUser(email: $email, password: $password, role: $role) {
+      id
+      email
+      role
+      isActive
+    }
+  }
+`;
+
+export const DEACTIVATE_USER = gql`
+  mutation DeactivateUser($userId: ID!) {
+    deactivateUser(userId: $userId) {
+      id
+      isActive
+    }
+  }
+`;
+
 export const SYSTEM_SETTINGS = gql`
   query SystemSettings {
     systemSettings {

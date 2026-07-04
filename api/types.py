@@ -17,6 +17,7 @@ class UserType:
     email: auto
     role: auto
     is_active: auto
+    date_joined: auto
 
 
 @strawberry_django.type(models.Room)
