@@ -153,6 +153,44 @@ export const DELETE_CHARGE = gql`
   }
 `;
 
+export const VITAL_HISTORY = gql`
+  query VitalHistory(
+    $patientId: ID!
+    $dateFrom: Date
+    $dateTo: Date
+    $types: [String!]
+  ) {
+    vitalHistory(
+      patientId: $patientId
+      dateFrom: $dateFrom
+      dateTo: $dateTo
+      types: $types
+    ) {
+      id
+      recordedAt
+      session
+      bpSystolic
+      bpDiastolic
+      pulse
+      temperature
+      spo2
+      weight
+      hasFlag
+      flaggedVitals
+    }
+  }
+`;
+
+export const VITALS_THRESHOLDS = gql`
+  query VitalsThresholds {
+    vitalsThresholds {
+      vitalType
+      belowThreshold
+      aboveThreshold
+    }
+  }
+`;
+
 export const CREATE_VITAL_READING = gql`
   mutation CreateVitalReading(
     $admissionId: ID!

@@ -16,6 +16,9 @@ _VITAL_FIELDS = [
     (VitalType.WEIGHT, "weight"),
 ]
 
+# Public {vital_type_value: reading_field} map, e.g. {"BP_SYSTOLIC": "bp_systolic"}.
+VITAL_FIELD_BY_TYPE = {vital_type.value: field for vital_type, field in _VITAL_FIELDS}
+
 
 def breached_vitals(reading) -> list[str]:
     """Return the VitalType values (e.g. ['SPO2', 'PULSE']) that breach a

@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from typing import List, Optional
@@ -269,6 +269,48 @@ class Query:
     @require_roles(UserRole.ADMIN, UserRole.NURSE)
     def vital_readings(self, info: Info) -> List[VitalReadingType]:
         return VitalReading.objects.all()
+
+    # A patient's vitals history, sorted by recorded_at (oldest first).
+    # Optionally filtered by date range and by vital types (readings that
+    # recorded at least one of the requested vitals). ADMIN + NURSE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.NURSE)
+    def vital_history(
+        self,
+        info: Info,
+        patient_id: strawberry.ID,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        types: Optional[List[str]] = None,
+    ) -> List[VitalReadingType]:
+        qs = VitalReading.objects.filter(admission__patient_id=patient_id)
+
+        if date_from is not None:
+            qs = qs.filter(
+                recorded_at__gte=timezone.make_aware(
+                    datetime.combine(date_from, time.min)
+                )
+            )
+        if date_to is not None:
+            # Inclusive of the whole `date_to` day.
+            qs = qs.filter(
+                recorded_at__lt=timezone.make_aware(
+                    datetime.combine(date_to + timedelta(days=1), time.min)
+                )
+            )
+
+        if types:
+            type_q = Q()
+            matched = False
+            for vital_type in types:
+                field = vitals.VITAL_FIELD_BY_TYPE.get(vital_type)
+                if field:
+                    type_q |= Q(**{f'{field}__isnull': False})
+                    matched = True
+            if matched:
+                qs = qs.filter(type_q)
+
+        return qs.order_by('recorded_at')
 
     # --- Any authenticated user (reference / operational data) -------------
     @strawberry.field
