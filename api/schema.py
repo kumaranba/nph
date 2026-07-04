@@ -4,7 +4,6 @@ from enum import Enum
 from typing import List, Optional
 
 import strawberry
-from django.conf import settings
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -16,8 +15,8 @@ from . import auth, vitals
 from .billing import BillingService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Invoice,
-    InvoiceStatus, Patient, Payment, Room, User, UserRole, VitalReading,
-    VitalsThreshold,
+    InvoiceStatus, Patient, Payment, Room, SystemSetting, User, UserRole,
+    VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
@@ -45,6 +44,39 @@ class VitalSessionEnum(Enum):
     """GraphQL enum for VitalReading.session (mirrors models.VitalSession)."""
     AM = 'AM'
     PM = 'PM'
+
+
+@strawberry.enum
+class VitalTypeEnum(Enum):
+    """GraphQL enum for VitalsThreshold.vital_type (mirrors models.VitalType)."""
+    BP_SYSTOLIC = 'BP_SYSTOLIC'
+    BP_DIASTOLIC = 'BP_DIASTOLIC'
+    PULSE = 'PULSE'
+    TEMPERATURE = 'TEMPERATURE'
+    SPO2 = 'SPO2'
+    WEIGHT = 'WEIGHT'
+
+
+@strawberry.input
+class VitalsThresholdInput:
+    """A single threshold update. A null bound means that side is unbounded."""
+    vital_type: VitalTypeEnum
+    below_threshold: Optional[Decimal] = None
+    above_threshold: Optional[Decimal] = None
+
+
+@strawberry.type
+class SystemSettingsType:
+    """Editable, runtime-configurable app settings."""
+    fee_due_warning_days: int
+    vitals_thresholds: List[VitalsThresholdType]
+
+
+def _system_settings() -> SystemSettingsType:
+    return SystemSettingsType(
+        fee_due_warning_days=SystemSetting.load().fee_due_warning_days,
+        vitals_thresholds=list(VitalsThreshold.objects.order_by('vital_type')),
+    )
 
 
 @strawberry.type
@@ -168,6 +200,13 @@ class Query:
     def users(self, info: Info) -> List[UserType]:
         return User.objects.all()
 
+    # Editable app settings: fee-due warning window and vitals thresholds.
+    # ADMIN only.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN)
+    def system_settings(self, info: Info) -> SystemSettingsType:
+        return _system_settings()
+
     # --- ADMIN + FINANCE (financial data) ----------------------------------
     @strawberry.field
     @require_roles(UserRole.ADMIN, UserRole.FINANCE)
@@ -217,7 +256,7 @@ class Query:
         self, info: Info, within_days: Optional[int] = None
     ) -> List[FeeDueItem]:
         if within_days is None:
-            within_days = settings.FEE_DUE_WARNING_DAYS
+            within_days = SystemSetting.load().fee_due_warning_days
         if within_days < 0:
             raise GraphQLError('withinDays must be non-negative.')
 
@@ -707,6 +746,35 @@ class Mutation:
             outstanding_invoice_count=outstanding_count,
             refund_amount=admission.refund_amount,
         )
+
+    # Update editable app settings. Any field left null is unchanged; only the
+    # thresholds included in `thresholds` are upserted. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def update_settings(
+        self,
+        info: Info,
+        fee_due_warning_days: Optional[int] = None,
+        thresholds: Optional[List[VitalsThresholdInput]] = None,
+    ) -> SystemSettingsType:
+        with transaction.atomic():
+            if fee_due_warning_days is not None:
+                if fee_due_warning_days < 0:
+                    raise GraphQLError('feeDueWarningDays must be non-negative.')
+                setting = SystemSetting.load()
+                setting.fee_due_warning_days = fee_due_warning_days
+                setting.save()
+
+            for threshold in thresholds or []:
+                VitalsThreshold.objects.update_or_create(
+                    vital_type=threshold.vital_type.value,
+                    defaults={
+                        'below_threshold': threshold.below_threshold,
+                        'above_threshold': threshold.above_threshold,
+                    },
+                )
+
+        return _system_settings()
 
 
 schema = strawberry.Schema(

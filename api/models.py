@@ -298,3 +298,40 @@ class VitalsThreshold(models.Model):
             f'{self.get_vital_type_display()} '
             f'(below={self.below_threshold}, above={self.above_threshold})'
         )
+
+
+# ---------------------------------------------------------------------------
+# SystemSetting
+# ---------------------------------------------------------------------------
+
+def default_fee_due_warning_days():
+    """Initial value for a fresh SystemSetting — seeded from the env-configured
+    Django setting so existing deployments keep their value."""
+    from django.conf import settings
+    return getattr(settings, 'FEE_DUE_WARNING_DAYS', 7)
+
+
+class SystemSetting(models.Model):
+    """Singleton row holding editable, runtime-configurable app settings.
+
+    Always use ``SystemSetting.load()`` — the row is pinned to pk=1.
+    """
+    fee_due_warning_days = models.PositiveIntegerField(
+        default=default_fee_due_warning_days
+    )
+
+    class Meta:
+        verbose_name = 'System settings'
+        verbose_name_plural = 'System settings'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # enforce singleton
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return f'System settings (fee_due_warning_days={self.fee_due_warning_days})'

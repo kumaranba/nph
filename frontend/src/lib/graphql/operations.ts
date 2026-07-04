@@ -181,6 +181,38 @@ export const VITAL_HISTORY = gql`
   }
 `;
 
+export const SYSTEM_SETTINGS = gql`
+  query SystemSettings {
+    systemSettings {
+      feeDueWarningDays
+      vitalsThresholds {
+        vitalType
+        belowThreshold
+        aboveThreshold
+      }
+    }
+  }
+`;
+
+export const UPDATE_SETTINGS = gql`
+  mutation UpdateSettings(
+    $feeDueWarningDays: Int
+    $thresholds: [VitalsThresholdInput!]
+  ) {
+    updateSettings(
+      feeDueWarningDays: $feeDueWarningDays
+      thresholds: $thresholds
+    ) {
+      feeDueWarningDays
+      vitalsThresholds {
+        vitalType
+        belowThreshold
+        aboveThreshold
+      }
+    }
+  }
+`;
+
 export const VITALS_THRESHOLDS = gql`
   query VitalsThresholds {
     vitalsThresholds {
