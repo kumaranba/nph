@@ -15,6 +15,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  EmptyState,
+  QueryError,
+  TableSkeleton,
+} from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
 import {
   CREATE_USER,
@@ -56,7 +61,12 @@ export default function UsersPage() {
   const isAdmin = meData?.me.role === "ADMIN";
   const myId = meData?.me.id;
 
-  const { data, loading } = useQuery<UsersResult>(USERS, {
+  const {
+    data,
+    loading,
+    error: usersError,
+    refetch: refetchUsers,
+  } = useQuery<UsersResult>(USERS, {
     skip: !hasToken || !isAdmin,
   });
 
@@ -114,7 +124,14 @@ export default function UsersPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton rows={4} cols={4} />
+          ) : usersError ? (
+            <QueryError
+              message={usersError.message}
+              onRetry={() => refetchUsers()}
+            />
+          ) : users.length === 0 ? (
+            <EmptyState title="No users" />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

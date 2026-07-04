@@ -4,6 +4,7 @@ import { useApolloClient, useQuery } from "@apollo/client";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { LinesSkeleton } from "@/components/query-states";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -49,8 +50,8 @@ export default function DashboardPage() {
 
   if (!hasToken || loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      <main className="mx-auto min-h-screen w-full max-w-md p-8">
+        <LinesSkeleton lines={4} />
       </main>
     );
   }

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { LogPaymentModal } from "@/components/log-payment-modal";
+import { LinesSkeleton, QueryError } from "@/components/query-states";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -71,7 +72,7 @@ export default function InvoiceDetailPage() {
     if (!hasToken) router.replace("/login");
   }, [hasToken, router]);
 
-  const { data, loading } = useQuery<InvoiceResult>(INVOICE, {
+  const { data, loading, error, refetch } = useQuery<InvoiceResult>(INVOICE, {
     variables: { patientId: params.id, period: params.period },
     skip: !hasToken,
   });
@@ -79,8 +80,16 @@ export default function InvoiceDetailPage() {
 
   if (!hasToken || loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      <main className="mx-auto min-h-screen max-w-2xl p-8">
+        <LinesSkeleton lines={8} />
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="mx-auto min-h-screen max-w-2xl p-8">
+        <QueryError message={error.message} onRetry={() => refetch()} />
       </main>
     );
   }
