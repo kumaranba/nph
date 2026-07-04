@@ -35,6 +35,22 @@ export const SEARCH_PATIENTS = gql`
   }
 `;
 
+// Patients whose next billing cycle date falls within `withinDays` of today.
+// Pass null to use the server's feeDueWarningDays default.
+export const FEES_DUE_LIST = gql`
+  query FeesDueList($withinDays: Int) {
+    feesDueList(withinDays: $withinDays) {
+      id
+      patientId
+      name
+      room
+      dueDate
+      amountDue
+      daysUntilDue
+    }
+  }
+`;
+
 // Only vacant beds — used to populate the admission form's bed picker.
 export const VACANT_BEDS = gql`
   query VacantBeds {
