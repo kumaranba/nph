@@ -9,6 +9,7 @@ import {
   type Charge,
 } from "@/components/additional-charges-panel";
 import { DischargeModal } from "@/components/discharge-modal";
+import { LinesSkeleton, QueryError } from "@/components/query-states";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -57,7 +58,7 @@ export default function PatientProfilePage() {
     if (!hasToken) router.replace("/login");
   }, [hasToken, router]);
 
-  const { data, loading } = useQuery<PatientResult>(PATIENT, {
+  const { data, loading, error, refetch } = useQuery<PatientResult>(PATIENT, {
     variables: { pk: params.id },
     skip: !hasToken,
   });
@@ -65,8 +66,16 @@ export default function PatientProfilePage() {
 
   if (!hasToken || loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      <main className="mx-auto min-h-screen w-full max-w-md p-8">
+        <LinesSkeleton lines={6} />
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="mx-auto min-h-screen w-full max-w-md p-8">
+        <QueryError message={error.message} onRetry={() => refetch()} />
       </main>
     );
   }

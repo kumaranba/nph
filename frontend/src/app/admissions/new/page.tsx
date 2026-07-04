@@ -77,7 +77,7 @@ export default function NewAdmissionPage() {
   });
 
   // Bed picker fetches only VACANT beds.
-  const { data: bedsData, loading: bedsLoading } =
+  const { data: bedsData, loading: bedsLoading, error: bedsError } =
     useQuery<VacantBedsResult>(VACANT_BEDS);
 
   const [createAdmission, { loading: submitting, error: mutationError }] =
@@ -219,7 +219,11 @@ export default function NewAdmissionPage() {
                 {errors.bedId ? (
                   <p className="text-sm text-red-600">{errors.bedId.message}</p>
                 ) : null}
-                {!bedsLoading && bedsData?.beds.length === 0 ? (
+                {bedsError ? (
+                  <p className="text-sm text-red-600">
+                    Couldn’t load beds: {bedsError.message}
+                  </p>
+                ) : !bedsLoading && bedsData?.beds.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No vacant beds available.
                   </p>

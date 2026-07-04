@@ -13,6 +13,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  EmptyState,
+  QueryError,
+  TableSkeleton,
+} from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
 import { FEES_DUE_LIST, ME } from "@/lib/graphql/operations";
 
@@ -55,10 +60,13 @@ export default function FeesDuePage() {
   // null → server falls back to the feeDueWarningDays system setting.
   const withinDays = withinDaysInput === "" ? null : Number(withinDaysInput);
 
-  const { data, loading } = useQuery<FeesDueResult>(FEES_DUE_LIST, {
-    variables: { withinDays },
-    skip: !hasToken || !allowed,
-  });
+  const { data, loading, error, refetch } = useQuery<FeesDueResult>(
+    FEES_DUE_LIST,
+    {
+      variables: { withinDays },
+      skip: !hasToken || !allowed,
+    }
+  );
 
   const rows = useMemo(() => {
     const list = [...(data?.feesDueList ?? [])];
@@ -119,11 +127,14 @@ export default function FeesDuePage() {
           </div>
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <TableSkeleton rows={4} cols={6} />
+          ) : error ? (
+            <QueryError message={error.message} onRetry={() => refetch()} />
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No fees due in this window.
-            </p>
+            <EmptyState
+              title="No fees due"
+              description="No patients have a billing cycle date in this window."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

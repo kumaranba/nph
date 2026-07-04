@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LinesSkeleton, QueryError } from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
 import { ME, SYSTEM_SETTINGS, UPDATE_SETTINGS } from "@/lib/graphql/operations";
 
@@ -59,10 +60,14 @@ export default function SettingsPage() {
   const [edits, setEdits] = useState<Record<string, ThresholdEdit>>({});
   const [saved, setSaved] = useState(false);
 
-  const { data: settingsData, loading } = useQuery<SettingsResult>(
-    SYSTEM_SETTINGS,
-    { skip: !hasToken || !isAdmin }
-  );
+  const {
+    data: settingsData,
+    loading,
+    error: settingsError,
+    refetch: refetchSettings,
+  } = useQuery<SettingsResult>(SYSTEM_SETTINGS, {
+    skip: !hasToken || !isAdmin,
+  });
 
   // Seed the editable form from the fetched settings once they arrive.
   useEffect(() => {
@@ -136,7 +141,12 @@ export default function SettingsPage() {
       <h1 className="text-xl font-semibold">System settings</h1>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <LinesSkeleton lines={6} />
+      ) : settingsError ? (
+        <QueryError
+          message={settingsError.message}
+          onRetry={() => refetchSettings()}
+        />
       ) : (
         <>
           {/* Billing */}

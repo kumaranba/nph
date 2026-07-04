@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { VitalChart } from "@/components/vital-chart";
+import {
+  EmptyState,
+  QueryError,
+  TableSkeleton,
+} from "@/components/query-states";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -101,7 +106,7 @@ export default function VitalsHistoryPage() {
     return Object.fromEntries((list ?? []).map((t) => [t.vitalType, t]));
   }, [thresholdData]);
 
-  const { data, loading } = useQuery(VITAL_HISTORY, {
+  const { data, loading, error, refetch } = useQuery(VITAL_HISTORY, {
     variables: {
       patientId: selected?.id,
       dateFrom: dateFrom || null,
@@ -269,15 +274,19 @@ export default function VitalsHistoryPage() {
           <Card>
             <CardContent className="pt-6">
               {types.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Select at least one vital type.
-                </p>
+                <EmptyState
+                  title="No vital types selected"
+                  description="Select at least one vital type above."
+                />
               ) : loading ? (
-                <p className="text-sm text-muted-foreground">Loading…</p>
+                <TableSkeleton rows={5} cols={5} />
+              ) : error ? (
+                <QueryError message={error.message} onRetry={() => refetch()} />
               ) : readings.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No readings for this patient and filter.
-                </p>
+                <EmptyState
+                  title="No readings"
+                  description="No vitals recorded for this patient and filter."
+                />
               ) : view === "table" ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">

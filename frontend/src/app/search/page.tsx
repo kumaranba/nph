@@ -12,6 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  EmptyState,
+  QueryError,
+  TableSkeleton,
+} from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
 import { SEARCH_PATIENTS } from "@/lib/graphql/operations";
 import { useDebounce } from "@/lib/use-debounce";
@@ -61,15 +66,18 @@ export default function SearchPage() {
   }, [hasToken, router]);
 
   const trimmed = debouncedTerm.trim();
-  const { data, loading } = useQuery<SearchResult>(SEARCH_PATIENTS, {
-    variables: { query: trimmed },
-    skip: !hasToken || trimmed === "",
-  });
+  const { data, loading, error, refetch } = useQuery<SearchResult>(
+    SEARCH_PATIENTS,
+    {
+      variables: { query: trimmed },
+      skip: !hasToken || trimmed === "",
+    }
+  );
 
   if (!hasToken) return null;
 
   const rows = data?.searchPatients ?? [];
-  const showEmpty = trimmed !== "" && !loading && rows.length === 0;
+  const showEmpty = trimmed !== "" && !loading && !error && rows.length === 0;
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl p-8">
@@ -90,15 +98,19 @@ export default function SearchPage() {
           />
 
           {trimmed === "" ? (
-            <p className="text-sm text-muted-foreground">
-              Enter a search term above.
-            </p>
+            <EmptyState
+              title="Search for a patient"
+              description="Enter a name, patient ID, or guardian name / phone above."
+            />
           ) : loading ? (
-            <p className="text-sm text-muted-foreground">Searching…</p>
+            <TableSkeleton rows={4} cols={5} />
+          ) : error ? (
+            <QueryError message={error.message} onRetry={() => refetch()} />
           ) : showEmpty ? (
-            <p className="text-sm text-muted-foreground">
-              No patients match “{trimmed}”.
-            </p>
+            <EmptyState
+              title="No matches"
+              description={`No patients match “${trimmed}”.`}
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
