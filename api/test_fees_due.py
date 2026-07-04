@@ -3,7 +3,6 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from django.test import override_settings
 
 from api.models import (
     Admission,
@@ -87,12 +86,17 @@ def test_boundary_day_is_included(admin_client, room):
     assert excluded["data"]["feesDueList"] == []
 
 
-@override_settings(FEE_DUE_WARNING_DAYS=3)
 def test_within_days_defaults_to_system_setting(admin_client, room):
+    from api.models import SystemSetting
+
+    setting = SystemSetting.load()
+    setting.fee_due_warning_days = 3
+    setting.save()
+
     _admit(room, name="Due In 3", anchor_day=18, label="D1")  # days 3 (<= 3)
     _admit(room, name="Due In 5", anchor_day=20, label="D2")  # days 5 (> 3)
 
-    # No withinDays passed → falls back to FEE_DUE_WARNING_DAYS (3).
+    # No withinDays passed → falls back to the SystemSetting value (3).
     result = admin_client.execute(FEES_DUE, {"withinDays": None})
     assert result.get("errors") is None
     assert [r["name"] for r in result["data"]["feesDueList"]] == ["Due In 3"]
