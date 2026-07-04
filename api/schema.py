@@ -30,6 +30,14 @@ from .types import (
 # ---------------------------------------------------------------------------
 
 @strawberry.enum
+class UserRoleEnum(Enum):
+    """GraphQL enum for User.role (mirrors models.UserRole)."""
+    ADMIN = 'ADMIN'
+    FINANCE = 'FINANCE'
+    NURSE = 'NURSE'
+
+
+@strawberry.enum
 class ChargeCategoryEnum(Enum):
     """GraphQL enum for AdditionalCharge.category (mirrors models.ChargeCategory)."""
     DRUGS = 'DRUGS'
@@ -775,6 +783,39 @@ class Mutation:
                 )
 
         return _system_settings()
+
+    # Create a staff user with a role. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def create_user(
+        self, info: Info, email: str, password: str, role: UserRoleEnum
+    ) -> UserType:
+        email = email.strip().lower()
+        if not email:
+            raise GraphQLError('Email is required.')
+        if len(password) < 8:
+            raise GraphQLError('Password must be at least 8 characters.')
+        if User.objects.filter(email=email).exists():
+            raise GraphQLError('A user with this email already exists.')
+        return User.objects.create_user(
+            email=email, password=password, role=role.value
+        )
+
+    # Deactivate a user (soft-disable login). ADMIN only. An admin cannot
+    # deactivate their own account.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def deactivate_user(self, info: Info, user_id: strawberry.ID) -> UserType:
+        if str(info.context.request.user.id) == str(user_id):
+            raise GraphQLError('You cannot deactivate your own account.')
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            raise GraphQLError('User not found.')
+        if user.is_active:
+            user.is_active = False
+            user.save(update_fields=['is_active'])
+        return user
 
 
 schema = strawberry.Schema(
