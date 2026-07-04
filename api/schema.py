@@ -6,7 +6,7 @@ from typing import List, Optional
 import strawberry
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 from graphql import GraphQLError
 from strawberry.types import Info
