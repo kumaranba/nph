@@ -11,7 +11,7 @@ from graphql import GraphQLError
 from strawberry.types import Info
 from strawberry_django.optimizer import DjangoOptimizerExtension
 
-from . import auth, vitals
+from . import auth, dashboard, vitals
 from .billing import BillingService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Invoice,
@@ -188,6 +188,52 @@ def _fee_status_for_patient(patient) -> str:
     if invoice.billing_period_end <= today + timedelta(days=DUE_SOON_WINDOW_DAYS):
         return 'DUE_SOON'
     return 'CURRENT'
+
+
+# ---------------------------------------------------------------------------
+# Dashboard result types
+# ---------------------------------------------------------------------------
+
+@strawberry.type
+class DashboardStats:
+    beds_occupied: int
+    beds_total: int
+    outstanding_total: Decimal
+    outstanding_invoice_count: int
+    overdue_count: int
+    fees_due_total: Decimal
+    fees_due_count: int
+    fees_due_today: int
+    flagged_vitals_count: int
+    flagged_patient_count: int
+    critical_count: int
+
+
+@strawberry.type
+class MonthlyTotal:
+    month: str
+    total: Decimal
+
+
+@strawberry.type
+class FlaggedVitalItem:
+    id: strawberry.ID
+    patient_name: str
+    room: str
+    vital: str
+    value: float
+    direction: str          # "high" | "low"
+    severity: str           # "critical" | "warning"
+    recorded_at: datetime
+
+
+@strawberry.type
+class ActivityItem:
+    id: strawberry.ID
+    kind: str               # payment | admission | charge | vitals
+    message: str
+    actor: str
+    created_at: str
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +496,54 @@ class Query:
     @login_required
     def vitals_thresholds(self, info: Info) -> List[VitalsThresholdType]:
         return VitalsThreshold.objects.all()
+
+    # --- Dashboard ---------------------------------------------------------
+    # Aggregate overview counts. Any authenticated staff member.
+    @strawberry.field
+    @login_required
+    def dashboard_stats(self, info: Info) -> DashboardStats:
+        return DashboardStats(**dashboard.compute_stats())
+
+    # Monthly payment totals for the trend chart. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def payments_trend(self, info: Info, months: int = 6) -> List[MonthlyTotal]:
+        months = max(1, min(months, 24))
+        return [MonthlyTotal(**b) for b in dashboard.payments_trend(months)]
+
+    # Out-of-range vitals feed for active patients. ADMIN + NURSE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.NURSE)
+    def flagged_vitals(
+        self, info: Info, limit: Optional[int] = None
+    ) -> List[FlaggedVitalItem]:
+        return [FlaggedVitalItem(**i) for i in dashboard.flagged_vital_items(limit)]
+
+    # Most recent admissions. Any authenticated staff member.
+    @strawberry.field
+    @login_required
+    def recent_admissions(
+        self, info: Info, limit: int = 5
+    ) -> List[AdmissionType]:
+        return (
+            Admission.objects.select_related('patient', 'bed__room')
+            .order_by('-admission_date', '-id')[: max(1, min(limit, 50))]
+        )
+
+    # Wards (rooms) with their beds. Any authenticated staff member.
+    @strawberry.field
+    @login_required
+    def wards(self, info: Info) -> List[RoomType]:
+        return Room.objects.prefetch_related('beds').order_by('name')
+
+    # Synthesized recent-activity feed. Any authenticated staff member.
+    @strawberry.field
+    @login_required
+    def activity_log(self, info: Info, limit: int = 10) -> List[ActivityItem]:
+        return [
+            ActivityItem(**i)
+            for i in dashboard.activity_items(max(1, min(limit, 50)))
+        ]
 
 
 # ---------------------------------------------------------------------------

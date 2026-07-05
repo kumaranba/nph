@@ -39,6 +39,13 @@ OPERATIONS = [
     # --- Queries: ADMIN + NURSE -------------------------------------------
     ("vitalReadings", "{ vitalReadings { id } }", {"ADMIN", "NURSE"}),
     ("vitalHistory", '{ vitalHistory(patientId: "1") { id } }', {"ADMIN", "NURSE"}),
+    ("flaggedVitals", "{ flaggedVitals { id } }", {"ADMIN", "NURSE"}),
+    # --- Dashboard queries ------------------------------------------------
+    ("dashboardStats", "{ dashboardStats { bedsTotal } }", ALL),
+    ("recentAdmissions", "{ recentAdmissions { id } }", ALL),
+    ("wards", "{ wards { id } }", ALL),
+    ("activityLog", "{ activityLog { id } }", ALL),
+    ("paymentsTrend", "{ paymentsTrend { month } }", {"ADMIN", "FINANCE"}),
     # --- Mutations: ADMIN only --------------------------------------------
     (
         "createAdmission",

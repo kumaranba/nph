@@ -78,6 +78,11 @@ class AdmissionType:
     def additional_charges(self) -> list['AdditionalChargeType']:
         return self.additional_charges.order_by('-charge_date', '-id')
 
+    # Convenience passthrough of the patient's admitting doctor.
+    @strawberry.field
+    def admitting_doctor(self) -> str:
+        return self.patient.admitting_doctor
+
 
 @strawberry_django.type(models.Invoice)
 class InvoiceType:
