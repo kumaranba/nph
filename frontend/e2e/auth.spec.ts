@@ -19,12 +19,13 @@ test("user can log in and land on the authenticated dashboard", async ({ page })
   await page.getByLabel("Password").fill("secret123");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  // Redirected to the dashboard, which renders data from the `me` query.
+  // Redirected to the dashboard. The app shell (sidebar/topbar) shows the
+  // authenticated user from the `me` query: email plus the friendly role
+  // label ("Administrator" for ADMIN). The role label appears in both the
+  // sidebar and topbar, so match the first occurrence.
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByText("admin@nph.test")).toBeVisible();
-  // getByText is substring + case-insensitive, so "ADMIN" also matches
-  // "admin@nph.test". Pin to the exact role cell.
-  await expect(page.getByText("ADMIN", { exact: true })).toBeVisible();
+  await expect(page.getByText("Administrator").first()).toBeVisible();
 });
 
 test("invalid credentials show an error and stay on the login page", async ({ page }) => {
