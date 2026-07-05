@@ -26,6 +26,11 @@
 .DS_Store
 *.pem
 
+# pre-redesign backup of src/ (kept locally; old code lives in git history)
+/src.old/
+# design-tool export artifacts
+*.dc.html
+
 # debug
 npm-debug.log*
 yarn-debug.log*

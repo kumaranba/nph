@@ -7,6 +7,11 @@ import { defineConfig, devices } from "@playwright/test";
  * The Django GraphQL backend must already be running on :8000 — in CI the
  * workflow starts it; locally, run `python manage.py runserver` first.
  */
+// Port is overridable (E2E_PORT) so a local run can avoid a dev server already
+// on :3000. CI leaves it at the default 3000.
+const PORT = process.env.E2E_PORT ?? "3000";
+const BASE_URL = `http://localhost:${PORT}`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -17,15 +22,15 @@ export default defineConfig({
     ? [["list"], ["html", { open: "never" }]]
     : "html",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: BASE_URL,
     trace: "on-first-retry",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
-    command: "npm run build && npm run start",
-    url: "http://localhost:3000",
+    command: `npm run build && npm run start -- -p ${PORT}`,
+    url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
   },
