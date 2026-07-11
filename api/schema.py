@@ -119,7 +119,7 @@ class CreateAdmissionInput:
     diagnosis: str
     admitting_doctor: str
     # Admission details
-    bed_id: strawberry.ID
+    bed_id: Optional[strawberry.ID] = None
     admission_date: date
     monthly_fee: Decimal
     # Optional patient details
@@ -347,7 +347,7 @@ class Query:
                     id=admission.patient.id,
                     patient_id=admission.patient.patient_id,
                     name=admission.patient.name,
-                    room=admission.bed.room.name,
+                    room=admission.bed.room.name if admission.bed else None,
                     due_date=due_date,
                     amount_due=admission.monthly_fee + charges,
                     days_until_due=days_until_due,
@@ -470,8 +470,8 @@ class Query:
                     guardian_name=patient.guardian_name,
                     guardian_phone=patient.guardian_phone,
                     admission_date=admission.admission_date if admission else None,
-                    room=admission.bed.room.name if admission else None,
-                    bed=admission.bed.label if admission else None,
+                    room=admission.bed.room.name if admission and admission.bed else None,
+                    bed=admission.bed.label if admission and admission.bed else None,
                     fee_status=_fee_status_for_patient(patient),
                 )
             )
@@ -759,13 +759,14 @@ class Mutation:
             raise GraphQLError('Monthly fee cannot be negative.')
 
         with transaction.atomic():
-            try:
-                bed = Bed.objects.select_for_update().get(pk=input.bed_id)
-            except Bed.DoesNotExist:
-                raise GraphQLError('Bed not found.')
-
-            if bed.status == BedStatus.OCCUPIED:
-                raise GraphQLError('Bed is already occupied.')
+            bed = None
+            if input.bed_id is not None:
+                try:
+                    bed = Bed.objects.select_for_update().get(pk=input.bed_id)
+                except Bed.DoesNotExist:
+                    raise GraphQLError('Bed not found.')
+                if bed.status == BedStatus.OCCUPIED:
+                    raise GraphQLError('Bed is already occupied.')
 
             patient = Patient.objects.create(
                 name=input.name.strip(),
@@ -782,8 +783,9 @@ class Mutation:
                 monthly_fee=input.monthly_fee,
                 status=AdmissionStatus.ACTIVE,
             )
-            bed.status = BedStatus.OCCUPIED
-            bed.save(update_fields=['status'])
+            if bed is not None:
+                bed.status = BedStatus.OCCUPIED
+                bed.save(update_fields=['status'])
 
         return admission
 
@@ -837,10 +839,10 @@ class Mutation:
                 admission.refund_amount = refund_amount
             admission.save()
 
-            # Free the bed.
-            bed = admission.bed
-            bed.status = BedStatus.VACANT
-            bed.save(update_fields=['status'])
+            # Free the bed if one was assigned.
+            if admission.bed is not None:
+                admission.bed.status = BedStatus.VACANT
+                admission.bed.save(update_fields=['status'])
 
         return DischargeResult(
             admission=admission,

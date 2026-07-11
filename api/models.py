@@ -139,7 +139,7 @@ class DischargeType(models.TextChoices):
 
 class Admission(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.PROTECT, related_name='admissions')
-    bed = models.ForeignKey(Bed, on_delete=models.PROTECT, related_name='admissions')
+    bed = models.ForeignKey(Bed, on_delete=models.PROTECT, related_name='admissions', null=True, blank=True)
     admission_date = models.DateField()
     monthly_fee = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(
