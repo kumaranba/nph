@@ -101,6 +101,7 @@ export const PATIENT = gql`
         id
         status
         admissionDate
+        monthlyFee
         hasOutstandingDues
         outstandingInvoiceCount
         bed {
@@ -330,6 +331,30 @@ export const LOG_PAYMENT = gql`
       status
       amountPaid
       balanceDue
+    }
+  }
+`;
+
+// Record a patient-level payment (clears outstanding + advances future months).
+export const RECORD_PATIENT_PAYMENT = gql`
+  mutation RecordPatientPayment(
+    $patientId: ID!
+    $amount: Decimal!
+    $paidOn: Date!
+  ) {
+    recordPatientPayment(
+      patientId: $patientId
+      amount: $amount
+      paidOn: $paidOn
+    ) {
+      patientId
+      totalRecorded
+      monthsCovered
+      creditRemaining
+      allocations {
+        period
+        amount
+      }
     }
   }
 `;

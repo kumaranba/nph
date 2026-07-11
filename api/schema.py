@@ -236,6 +236,24 @@ class ActivityItem:
     created_at: str
 
 
+@strawberry.type
+class PaymentAllocation:
+    """One invoice the payment was applied to."""
+    invoice_id: strawberry.ID
+    period: str             # "YYYY-MM"
+    amount: Decimal
+
+
+@strawberry.type
+class RecordPaymentResult:
+    """Outcome of a (possibly advance) patient payment."""
+    patient_id: strawberry.ID
+    total_recorded: Decimal
+    months_covered: int
+    credit_remaining: Decimal
+    allocations: List[PaymentAllocation]
+
+
 # ---------------------------------------------------------------------------
 # Query
 # ---------------------------------------------------------------------------
@@ -598,6 +616,52 @@ class Mutation:
             amount=amount,
             paid_on=paid_on,
             recorded_by=info.context.request.user,
+        )
+
+    # Record a payment for a PATIENT (not a single invoice). Clears their
+    # outstanding invoices oldest-first, then applies any surplus as an advance
+    # against upcoming monthly invoices. ADMIN + FINANCE.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def record_patient_payment(
+        self,
+        info: Info,
+        patient_id: strawberry.ID,
+        amount: Decimal,
+        paid_on: date,
+    ) -> RecordPaymentResult:
+        if amount <= 0:
+            raise GraphQLError('Amount must be positive.')
+
+        admission = (
+            Admission.objects.filter(
+                patient_id=patient_id, status=AdmissionStatus.ACTIVE
+            )
+            .order_by('-admission_date')
+            .first()
+            or Admission.objects.filter(patient_id=patient_id)
+            .order_by('-admission_date')
+            .first()
+        )
+        if admission is None:
+            raise GraphQLError('No admission found for this patient.')
+
+        allocations, remaining = BillingService.record_payment_for_admission(
+            admission, amount, paid_on, info.context.request.user
+        )
+        return RecordPaymentResult(
+            patient_id=admission.patient_id,
+            total_recorded=amount - remaining,
+            months_covered=len(allocations),
+            credit_remaining=remaining,
+            allocations=[
+                PaymentAllocation(
+                    invoice_id=inv.id,
+                    period=inv.billing_period_start.strftime('%Y-%m'),
+                    amount=amt,
+                )
+                for inv, amt in allocations
+            ],
         )
 
     # Record a payment against an invoice and recompute its status.

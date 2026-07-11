@@ -147,3 +147,80 @@ class BillingService:
             invoice.status = InvoiceStatus.PAID
         invoice.save(update_fields=["status"])
         return invoice
+
+    @classmethod
+    def balance_due(cls, invoice: Invoice) -> Decimal:
+        return (
+            invoice.total_due
+            - (invoice.refund_amount or Decimal("0"))
+            - cls.amount_paid(invoice)
+        )
+
+    # -------------------------------------------------------- record a payment
+    @classmethod
+    @transaction.atomic
+    def record_payment_for_admission(
+        cls,
+        admission,
+        amount: Decimal,
+        paid_on: date,
+        recorded_by,
+        max_advance_months: int = 12,
+    ):
+        """Record a (possibly advance) payment for an admission.
+
+        The amount is applied greedily: first it clears the admission's existing
+        outstanding invoices oldest-first, then — if money remains — it generates
+        and pays the upcoming monthly invoices (an advance), up to
+        ``max_advance_months``. Returns ``(allocations, leftover_credit)`` where
+        each allocation is ``(invoice, amount_applied)``.
+        """
+        from .models import Payment  # local import avoids a cycle at module load
+
+        remaining = Decimal(amount)
+        allocations = []
+
+        def pay(invoice):
+            nonlocal remaining
+            due = cls.balance_due(invoice)
+            if due <= 0:
+                return
+            applied = min(remaining, due)
+            Payment.objects.create(
+                invoice=invoice,
+                amount=applied,
+                paid_on=paid_on,
+                recorded_by=recorded_by,
+            )
+            cls.recompute_status(invoice)
+            remaining -= applied
+            allocations.append((invoice, applied))
+
+        # 1. Clear existing outstanding invoices, oldest first.
+        outstanding = admission.invoices.filter(
+            status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+        ).order_by("billing_period_start")
+        for invoice in outstanding:
+            if remaining <= 0:
+                break
+            pay(invoice)
+
+        # 2. Advance: generate & pay upcoming monthly invoices.
+        latest = admission.invoices.order_by("-billing_period_end").first()
+        as_of = (
+            latest.billing_period_end + timedelta(days=1)
+            if latest
+            else admission.admission_date
+        )
+        if as_of < admission.admission_date:
+            as_of = admission.admission_date
+        months = 0
+        while remaining > 0 and months < max_advance_months:
+            invoice = cls.generate_invoice_for_admission(admission.id, as_of=as_of)
+            if invoice is None:
+                break
+            pay(invoice)
+            as_of = invoice.billing_period_end + timedelta(days=1)
+            months += 1
+
+        return allocations, remaining

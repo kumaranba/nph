@@ -10,6 +10,7 @@ import {
   HeartPulse,
   Activity,
   Wallet,
+  Banknote,
   ShieldCheck,
   Settings,
   LogOut,
@@ -49,7 +50,10 @@ const SECTIONS: NavSection[] = [
   },
   {
     title: "Billing",
-    items: [{ label: "Fees due", href: "/fees-due", icon: Wallet, badge: "11" }],
+    items: [
+      { label: "Fees due", href: "/fees-due", icon: Wallet, badge: "11" },
+      { label: "Record payment", href: "/payments/new", icon: Banknote },
+    ],
   },
   {
     title: "Administration",
