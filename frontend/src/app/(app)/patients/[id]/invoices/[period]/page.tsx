@@ -95,7 +95,9 @@ export default function InvoiceDetailPage() {
   }
 
   const invoice = data?.invoice;
-  const isFinance = meData?.me.role === "FINANCE";
+  // ADMIN and FINANCE may record payments (NURSE may not).
+  const canLogPayment =
+    meData?.me.role === "ADMIN" || meData?.me.role === "FINANCE";
 
   if (!invoice) {
     return (
@@ -217,8 +219,8 @@ export default function InvoiceDetailPage() {
             )}
           </section>
 
-          {/* Log Payment — Finance only */}
-          {isFinance && invoice.status !== "PAID" ? (
+          {/* Log Payment — Admin + Finance */}
+          {canLogPayment && invoice.status !== "PAID" ? (
             <Button className="w-full" onClick={() => setShowPayment(true)}>
               Log payment
             </Button>
@@ -226,7 +228,7 @@ export default function InvoiceDetailPage() {
         </CardContent>
       </Card>
 
-      {showPayment && isFinance ? (
+      {showPayment && canLogPayment ? (
         <LogPaymentModal
           invoiceId={invoice.id}
           patientId={params.id}
