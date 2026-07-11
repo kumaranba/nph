@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Optional
 
 import strawberry
 import strawberry_django
@@ -54,7 +55,7 @@ class PatientType:
 class AdmissionType:
     id: auto
     patient: PatientType
-    bed: BedType
+    bed: Optional[BedType]
     admission_date: auto
     monthly_fee: auto
     status: auto
