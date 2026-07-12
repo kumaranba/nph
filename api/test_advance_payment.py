@@ -1,4 +1,4 @@
-"""Tests for recordPatientPayment (advance / multi-month payments)."""
+"""Tests for recordPatientPayment — advance payments held as patient credit."""
 from datetime import date
 from decimal import Decimal
 
@@ -19,10 +19,10 @@ from api.models import (
 RECORD = """
 mutation Record($patientId: ID!, $amount: Decimal!, $paidOn: Date!) {
   recordPatientPayment(patientId: $patientId, amount: $amount, paidOn: $paidOn) {
-    patientId
     totalRecorded
-    monthsCovered
-    creditRemaining
+    invoicesPaid
+    creditAdded
+    creditBalance
     allocations { period amount }
   }
 }
@@ -50,68 +50,82 @@ def _vars(patient, amount):
     return {"patientId": str(patient.id), "amount": amount, "paidOn": "2026-01-20"}
 
 
-def test_advance_payment_covers_multiple_months(finance_client, patient_admission):
+def test_surplus_is_held_as_credit(finance_client, patient_admission):
     patient, admission = patient_admission
-    # Current invoice already exists (Jan 15 - Feb 14).
     BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 1, 15))
 
-    # Pay 3 months up front (3 x 15000).
+    # Pay 3 months: clears the current invoice, holds 2 months as credit.
     result = finance_client.execute(RECORD, _vars(patient, "45000.00"))
     assert result.get("errors") is None
     data = result["data"]["recordPatientPayment"]
-    assert data["monthsCovered"] == 3
-    assert Decimal(str(data["totalRecorded"])) == Decimal("45000.00")
-    assert Decimal(str(data["creditRemaining"])) == Decimal("0.00")
-    # Three consecutive monthly periods, all fully paid.
-    periods = [a["period"] for a in data["allocations"]]
-    assert periods == ["2026-01", "2026-02", "2026-03"]
-
-    assert Invoice.objects.filter(admission=admission).count() == 3
-    assert all(i.status == InvoiceStatus.PAID for i in admission.invoices.all())
+    assert data["invoicesPaid"] == 1
+    assert Decimal(str(data["creditAdded"])) == Decimal("30000.00")
+    assert Decimal(str(data["creditBalance"])) == Decimal("30000.00")
+    # No future invoices are pre-generated — only the current one exists.
+    assert Invoice.objects.filter(admission=admission).count() == 1
+    admission.refresh_from_db()
+    assert admission.credit_balance == Decimal("30000.00")
 
 
-def test_payment_clears_existing_outstanding_first(finance_client, patient_admission):
-    patient, admission = patient_admission
-    inv = BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 1, 15))
-
-    # Pay exactly one month -> clears the current invoice, no advance.
-    result = finance_client.execute(RECORD, _vars(patient, "15000.00"))
-    data = result["data"]["recordPatientPayment"]
-    assert data["monthsCovered"] == 1
-    inv.refresh_from_db()
-    assert inv.status == InvoiceStatus.PAID
-    assert Invoice.objects.filter(admission=admission).count() == 1  # no future invoice
-
-
-def test_partial_advance_leaves_last_invoice_partial(finance_client, patient_admission):
+def test_credit_auto_applies_to_future_invoices(finance_client, patient_admission):
     patient, admission = patient_admission
     BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 1, 15))
+    finance_client.execute(RECORD, _vars(patient, "45000.00"))  # 30000 credit
 
-    # 1.5 months worth: current invoice paid, next invoice half paid.
-    result = finance_client.execute(RECORD, _vars(patient, "22500.00"))
-    data = result["data"]["recordPatientPayment"]
-    assert data["monthsCovered"] == 2
-    assert Decimal(str(data["creditRemaining"])) == Decimal("0.00")
-    invs = list(admission.invoices.order_by("billing_period_start"))
-    assert invs[0].status == InvoiceStatus.PAID
-    assert invs[1].status == InvoiceStatus.PARTIAL
-    assert BillingService.balance_due(invs[1]) == Decimal("7500.00")
+    # Next month's invoice is generated -> credit pays it automatically.
+    feb = BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 2, 15))
+    assert feb.status == InvoiceStatus.PAID
+    admission.refresh_from_db()
+    assert admission.credit_balance == Decimal("15000.00")
+
+    # And the following month too.
+    mar = BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 3, 15))
+    assert mar.status == InvoiceStatus.PAID
+    admission.refresh_from_db()
+    assert admission.credit_balance == Decimal("0.00")
 
 
-def test_advance_with_no_existing_invoice(finance_client, patient_admission):
+def test_partial_credit_leaves_invoice_partial(finance_client, patient_admission):
     patient, admission = patient_admission
-    # No invoice generated yet; paying 2 months should create and pay two.
+    BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 1, 15))
+    # 1.5 months: current paid, 7500 credit.
+    finance_client.execute(RECORD, _vars(patient, "22500.00"))
+    admission.refresh_from_db()
+    assert admission.credit_balance == Decimal("7500.00")
+
+    feb = BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 2, 15))
+    assert feb.status == InvoiceStatus.PARTIAL
+    assert BillingService.balance_due(feb) == Decimal("7500.00")
+    admission.refresh_from_db()
+    assert admission.credit_balance == Decimal("0.00")
+
+
+def test_payment_clears_outstanding_before_crediting(finance_client, patient_admission):
+    patient, admission = patient_admission
+    inv = BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 1, 15))
+    # Exactly one month clears the current invoice, no credit.
+    result = finance_client.execute(RECORD, _vars(patient, "15000.00"))
+    data = result["data"]["recordPatientPayment"]
+    assert data["invoicesPaid"] == 1
+    assert Decimal(str(data["creditAdded"])) == Decimal("0.00")
+    inv.refresh_from_db()
+    assert inv.status == InvoiceStatus.PAID
+
+
+def test_payment_with_no_invoice_becomes_all_credit(finance_client, patient_admission):
+    patient, admission = patient_admission
+    # No invoice yet -> nothing to clear -> entire amount is credit.
     result = finance_client.execute(RECORD, _vars(patient, "30000.00"))
     data = result["data"]["recordPatientPayment"]
-    assert data["monthsCovered"] == 2
-    assert Invoice.objects.filter(admission=admission).count() == 2
+    assert data["invoicesPaid"] == 0
+    assert Decimal(str(data["creditAdded"])) == Decimal("30000.00")
+    assert Invoice.objects.filter(admission=admission).count() == 0
 
 
 def test_admin_can_record_patient_payment(admin_client, patient_admission):
     patient, _ = patient_admission
     result = admin_client.execute(RECORD, _vars(patient, "15000.00"))
     assert result.get("errors") is None
-    assert result["data"]["recordPatientPayment"]["monthsCovered"] == 1
 
 
 def test_nurse_cannot_record_patient_payment(nurse_client, patient_admission):

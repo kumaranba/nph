@@ -76,7 +76,7 @@ OPERATIONS = [
     (
         "recordPatientPayment",
         'mutation { recordPatientPayment(patientId: "1", amount: "1", paidOn: "2026-01-01")'
-        " { monthsCovered } }",
+        " { invoicesPaid } }",
         {"ADMIN", "FINANCE"},
     ),
     # --- Mutations: FINANCE only ------------------------------------------

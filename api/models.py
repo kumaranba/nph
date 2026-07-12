@@ -152,6 +152,8 @@ class Admission(models.Model):
     discharge_notes = models.TextField(blank=True)
     # Refund recorded at discharge time. Finance-only; defaults to 0.
     refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Unapplied advance credit; drawn down as monthly invoices come due.
+    credit_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def __str__(self):
         return f'Admission #{self.pk} — {self.patient.name} ({self.status})'
@@ -197,8 +199,11 @@ class Payment(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name='payments')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     paid_on = models.DateField()
+    # Null when the payment was applied automatically from advance credit
+    # (no human recorder at the moment it was drawn down).
     recorded_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name='recorded_payments'
+        User, on_delete=models.PROTECT, related_name='recorded_payments',
+        null=True, blank=True,
     )
 
     def __str__(self):

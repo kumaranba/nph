@@ -246,11 +246,17 @@ class PaymentAllocation:
 
 @strawberry.type
 class RecordPaymentResult:
-    """Outcome of a (possibly advance) patient payment."""
+    """Outcome of a patient payment.
+
+    ``allocations`` are the invoices cleared now; any surplus becomes advance
+    ``credit_added`` and is reflected in the admission's ``credit_balance``,
+    to be drawn down automatically as future monthly invoices come due.
+    """
     patient_id: strawberry.ID
     total_recorded: Decimal
-    months_covered: int
-    credit_remaining: Decimal
+    invoices_paid: int
+    credit_added: Decimal
+    credit_balance: Decimal
     allocations: List[PaymentAllocation]
 
 
@@ -646,14 +652,16 @@ class Mutation:
         if admission is None:
             raise GraphQLError('No admission found for this patient.')
 
-        allocations, remaining = BillingService.record_payment_for_admission(
+        allocations, credit_added = BillingService.record_payment_for_admission(
             admission, amount, paid_on, info.context.request.user
         )
+        admission.refresh_from_db()
         return RecordPaymentResult(
             patient_id=admission.patient_id,
-            total_recorded=amount - remaining,
-            months_covered=len(allocations),
-            credit_remaining=remaining,
+            total_recorded=amount,
+            invoices_paid=len(allocations),
+            credit_added=credit_added,
+            credit_balance=admission.credit_balance,
             allocations=[
                 PaymentAllocation(
                     invoice_id=inv.id,

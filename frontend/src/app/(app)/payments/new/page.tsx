@@ -25,7 +25,12 @@ import {
 import { useDebounce } from "@/lib/use-debounce";
 
 type SearchRow = { id: string; patientId: string; name: string };
-type Admission = { id: string; status: string; monthlyFee: string };
+type Admission = {
+  id: string;
+  status: string;
+  monthlyFee: string;
+  creditBalance: string;
+};
 type PatientResult = {
   patient: { id: string; name: string; admissions: Admission[] } | null;
 };
@@ -33,8 +38,9 @@ type MeResult = { me: { role: string } };
 type RecordResult = {
   recordPatientPayment: {
     totalRecorded: string;
-    monthsCovered: number;
-    creditRemaining: string;
+    invoicesPaid: number;
+    creditAdded: string;
+    creditBalance: string;
     allocations: { period: string; amount: string }[];
   };
 };
@@ -141,8 +147,8 @@ export default function RecordPaymentPage() {
         <CardHeader>
           <CardTitle className="text-base">Patient</CardTitle>
           <CardDescription>
-            Advance payments are applied to outstanding invoices first, then to
-            upcoming months.
+            Payments clear outstanding invoices first; any surplus is held as
+            advance credit and applied automatically as future months are billed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -156,6 +162,9 @@ export default function RecordPaymentPage() {
                 {admission ? (
                   <p className="text-sm text-muted-foreground">
                     Monthly fee {money(monthlyFee)}
+                    {Number(admission.creditBalance) > 0
+                      ? ` · Advance credit ${money(admission.creditBalance)}`
+                      : ""}
                   </p>
                 ) : (
                   <p className="text-sm text-red-600">
@@ -257,31 +266,43 @@ export default function RecordPaymentPage() {
               Payment recorded
             </CardTitle>
             <CardDescription>
-              {money(result.totalRecorded)} applied across{" "}
-              {result.monthsCovered} month
-              {result.monthsCovered === 1 ? "" : "s"}
-              {Number(result.creditRemaining) > 0
-                ? ` · ${money(result.creditRemaining)} unapplied credit`
+              {money(result.totalRecorded)} recorded ·{" "}
+              {result.invoicesPaid} invoice
+              {result.invoicesPaid === 1 ? "" : "s"} cleared
+              {Number(result.creditAdded) > 0
+                ? ` · ${money(result.creditAdded)} added to advance credit`
                 : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="py-2 font-medium">Billing month</th>
-                  <th className="py-2 text-right font-medium">Applied</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.allocations.map((a) => (
-                  <tr key={a.period} className="border-b last:border-0">
-                    <td className="py-2">{a.period}</td>
-                    <td className="py-2 text-right">{money(a.amount)}</td>
+            {result.allocations.length > 0 ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2 font-medium">Billing month</th>
+                    <th className="py-2 text-right font-medium">Applied</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.allocations.map((a) => (
+                    <tr key={a.period} className="border-b last:border-0">
+                      <td className="py-2">{a.period}</td>
+                      <td className="py-2 text-right">{money(a.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            <p className="text-sm">
+              Advance credit balance:{" "}
+              <span className="font-medium">{money(result.creditBalance)}</span>
+              {Number(result.creditBalance) > 0 ? (
+                <span className="text-muted-foreground">
+                  {" "}
+                  — applied automatically as upcoming months are billed.
+                </span>
+              ) : null}
+            </p>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => router.push("/fees-due")}>
                 Back to fees due

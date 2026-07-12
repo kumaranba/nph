@@ -63,6 +63,7 @@ class AdmissionType:
     discharge_type: auto
     discharge_notes: auto
     refund_amount: auto
+    credit_balance: auto
 
     # Outstanding-dues info, computed from the admission's invoices. Lets the
     # UI warn about unpaid balances before a discharge is confirmed.

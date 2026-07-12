@@ -102,6 +102,7 @@ export const PATIENT = gql`
         status
         admissionDate
         monthlyFee
+        creditBalance
         hasOutstandingDues
         outstandingInvoiceCount
         bed {
@@ -349,8 +350,9 @@ export const RECORD_PATIENT_PAYMENT = gql`
     ) {
       patientId
       totalRecorded
-      monthsCovered
-      creditRemaining
+      invoicesPaid
+      creditAdded
+      creditBalance
       allocations {
         period
         amount
