@@ -14,6 +14,7 @@ from api.models import (
     AdmissionStatus,
     Bed,
     BedStatus,
+    Fee,
     Invoice,
     InvoiceStatus,
     Patient,
@@ -59,8 +60,16 @@ def admission(db):
 
 
 def _unpaid_invoice(admission):
+    fee = admission.active_fee or Fee.objects.create(
+        admission=admission,
+        amount=admission.monthly_fee,
+        effective_from=admission.admission_date,
+        is_active=True,
+        reason="test",
+    )
     return Invoice.objects.create(
         admission=admission,
+        fee=fee,
         billing_period_start=date(2026, 1, 1),
         billing_period_end=date(2026, 1, 31),
         base_fee=Decimal("25000.00"),

@@ -13,15 +13,17 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 
 from . import auth, dashboard, vitals
 from .billing import BillingService
+from .fees import FeeError, FeeService
 from .models import (
-    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Invoice,
+    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee, Invoice,
     InvoiceStatus, Patient, Payment, Room, SystemSetting, User, UserRole,
     VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
-    AdditionalChargeType, AdmissionType, BedType, InvoiceType, PatientType,
-    PaymentType, RoomType, UserType, VitalReadingType, VitalsThresholdType,
+    AdditionalChargeType, AdmissionType, BedType, FeeType, InvoiceType,
+    PatientType, PaymentType, RoomType, UserType, VitalReadingType,
+    VitalsThresholdType,
 )
 
 
@@ -324,6 +326,13 @@ class Query:
         return Invoice.objects.filter(
             admission__patient_id=patient_id
         ).order_by('-billing_period_start')
+
+    # A patient's full fee history across all admissions, newest first.
+    # ADMIN + FINANCE may view (ADMIN is view-only; only FINANCE may change).
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def fee_history(self, info: Info, patient_id: strawberry.ID) -> List[FeeType]:
+        return list(FeeService.get_fee_history(patient_id))
 
     # Active patients whose next billing cycle date falls within `within_days`
     # of today, sorted by due date. Defaults to the feeDueWarningDays system
@@ -672,6 +681,34 @@ class Mutation:
             ],
         )
 
+    # Change an admission's fee. FINANCE only. effective_from defaults to the
+    # next not-yet-invoiced billing cycle; an explicit different date needs
+    # override=True. Deactivates the current active fee and creates a new one.
+    @strawberry.mutation
+    @require_roles(UserRole.FINANCE)
+    def change_fee(
+        self,
+        info: Info,
+        admission_id: strawberry.ID,
+        amount: Decimal,
+        reason: str,
+        effective_from: Optional[date] = None,
+        override: bool = False,
+    ) -> FeeType:
+        try:
+            return FeeService.change_fee(
+                admission_id=admission_id,
+                amount=amount,
+                reason=reason,
+                user=info.context.request.user,
+                effective_from=effective_from,
+                override=override,
+            )
+        except Admission.DoesNotExist:
+            raise GraphQLError('Admission not found.')
+        except FeeError as exc:
+            raise GraphQLError(str(exc))
+
     # Record a payment against an invoice and recompute its status.
     # ADMIN + FINANCE.
     @strawberry.mutation
@@ -856,6 +893,15 @@ class Mutation:
                 monthly_fee=input.monthly_fee,
                 status=AdmissionStatus.ACTIVE,
             )
+            # Establish the admission's initial active fee.
+            Fee.objects.create(
+                admission=admission,
+                amount=input.monthly_fee,
+                effective_from=input.admission_date,
+                is_active=True,
+                reason='Initial fee',
+                created_by=info.context.request.user,
+            )
             if bed is not None:
                 bed.status = BedStatus.OCCUPIED
                 bed.save(update_fields=['status'])
@@ -911,6 +957,9 @@ class Mutation:
             if refund_amount is not None:
                 admission.refund_amount = refund_amount
             admission.save()
+
+            # A discharged admission holds no active fee.
+            FeeService.deactivate_fee_on_discharge(admission.id)
 
             # Free the bed if one was assigned.
             if admission.bed is not None:

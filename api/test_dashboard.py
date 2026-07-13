@@ -12,6 +12,7 @@ from api.models import (
     Bed,
     BedStatus,
     ChargeCategory,
+    Fee,
     Invoice,
     InvoiceStatus,
     Patient,
@@ -57,8 +58,12 @@ def seeded(db):
         email="fin@dash.test", password="secret123", role=UserRole.FINANCE
     )
 
+    fee = Fee.objects.create(
+        admission=admission, amount=Decimal("25000.00"),
+        effective_from=date(2026, 1, 15), is_active=True, reason="test",
+    )
     invoice = Invoice.objects.create(
-        admission=admission,
+        admission=admission, fee=fee,
         billing_period_start=date(2026, 1, 15), billing_period_end=date(2026, 2, 14),
         base_fee=Decimal("25000.00"), total_due=Decimal("25000.00"),
         status=InvoiceStatus.PARTIAL,

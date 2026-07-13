@@ -62,6 +62,24 @@ class BillingService:
         next_start = cls.get_billing_cycle_date(admission_date, next_month, next_year)
         return start, next_start - timedelta(days=1)
 
+    @staticmethod
+    def _ensure_active_fee(admission):
+        """Return the admission's active Fee, creating an initial one from
+        ``monthly_fee`` if the admission has none yet (system-owned)."""
+        from .models import Fee
+
+        fee = admission.fees.filter(is_active=True).first()
+        if fee is None:
+            fee = Fee.objects.create(
+                admission=admission,
+                amount=admission.monthly_fee,
+                effective_from=admission.admission_date,
+                is_active=True,
+                reason="Initial fee",
+                created_by=None,
+            )
+        return fee
+
     # --------------------------------------------------------------- invoices
     @classmethod
     @transaction.atomic
@@ -97,9 +115,13 @@ class BillingService:
             ).aggregate(total=Sum("amount"))["total"]
             or Decimal("0")
         )
-        base_fee = admission.monthly_fee
+        # Snapshot the admission's active fee onto the invoice. If none exists
+        # yet (e.g. a legacy admission), create the initial fee from monthly_fee.
+        fee = cls._ensure_active_fee(admission)
+        base_fee = fee.amount
         invoice = Invoice.objects.create(
             admission=admission,
+            fee=fee,
             billing_period_start=start,
             billing_period_end=end,
             base_fee=base_fee,

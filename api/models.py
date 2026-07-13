@@ -158,6 +158,45 @@ class Admission(models.Model):
     def __str__(self):
         return f'Admission #{self.pk} — {self.patient.name} ({self.status})'
 
+    @property
+    def active_fee(self):
+        """The single currently-active Fee for this admission, or None."""
+        return self.fees.filter(is_active=True).first()
+
+
+# ---------------------------------------------------------------------------
+# Fee
+# ---------------------------------------------------------------------------
+
+class Fee(models.Model):
+    """A dated fee amount for an admission.
+
+    Invariant (see CLAUDE.md): an ACTIVE admission has exactly one active Fee;
+    a DISCHARGED admission has zero active Fees. Fee rows are never deleted —
+    a change deactivates the current active Fee and creates a new active one,
+    preserving full history.
+    """
+    admission = models.ForeignKey(
+        Admission, on_delete=models.PROTECT, related_name='fees'
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    effective_from = models.DateField()
+    is_active = models.BooleanField(default=True)
+    reason = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='created_fees',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    deactivated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        state = 'active' if self.is_active else 'inactive'
+        return f'Fee #{self.pk} — Admission #{self.admission_id} ₹{self.amount} ({state})'
+
 
 # ---------------------------------------------------------------------------
 # Invoice
@@ -171,6 +210,11 @@ class InvoiceStatus(models.TextChoices):
 
 class Invoice(models.Model):
     admission = models.ForeignKey(Admission, on_delete=models.PROTECT, related_name='invoices')
+    # The Fee this invoice was billed against, snapshotted at generation time.
+    # (Nullable in migration 0006, populated in 0007, made non-null in 0008.)
+    fee = models.ForeignKey(
+        'Fee', on_delete=models.PROTECT, related_name='invoices',
+    )
     billing_period_start = models.DateField()
     billing_period_end = models.DateField()
     base_fee = models.DecimalField(max_digits=10, decimal_places=2)

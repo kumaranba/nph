@@ -36,6 +36,7 @@ OPERATIONS = [
     ("invoice", '{ invoice(patientId: "1", period: "2026-01") { id } }', {"ADMIN", "FINANCE"}),
     ("invoiceList", '{ invoiceList(patientId: "1") { id } }', {"ADMIN", "FINANCE"}),
     ("feesDueList", "{ feesDueList { id } }", {"ADMIN", "FINANCE"}),
+    ("feeHistory", '{ feeHistory(patientId: "1") { id } }', {"ADMIN", "FINANCE"}),
     # --- Queries: ADMIN + NURSE -------------------------------------------
     ("vitalReadings", "{ vitalReadings { id } }", {"ADMIN", "NURSE"}),
     ("vitalHistory", '{ vitalHistory(patientId: "1") { id } }', {"ADMIN", "NURSE"}),
@@ -98,6 +99,11 @@ OPERATIONS = [
         {"FINANCE"},
     ),
     ("deleteCharge", 'mutation { deleteCharge(chargeId: "1") }', {"FINANCE"}),
+    (
+        "changeFee",
+        'mutation { changeFee(admissionId: "1", amount: "1", reason: "r") { id } }',
+        {"FINANCE"},
+    ),
     # --- Mutations: ADMIN + NURSE -----------------------------------------
     (
         "createVitalReading",
