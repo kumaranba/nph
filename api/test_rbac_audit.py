@@ -79,13 +79,18 @@ OPERATIONS = [
         " { invoicesPaid } }",
         {"ADMIN", "FINANCE"},
     ),
-    # --- Mutations: FINANCE only ------------------------------------------
+    # --- Mutations: ADMIN + FINANCE (payments/refunds) --------------------
     (
         "logPayment",
         'mutation { logPayment(invoiceId: "1", amount: "1", paidOn: "2026-01-01") { id } }',
-        {"FINANCE"},
+        {"ADMIN", "FINANCE"},
     ),
-    ("logRefund", 'mutation { logRefund(invoiceId: "1", amount: "1") { id } }', {"FINANCE"}),
+    (
+        "logRefund",
+        'mutation { logRefund(invoiceId: "1", amount: "1") { id } }',
+        {"ADMIN", "FINANCE"},
+    ),
+    # --- Mutations: FINANCE only ------------------------------------------
     (
         "createCharge",
         'mutation { createCharge(admissionId: "1", category: DRUGS, amount: "1",'

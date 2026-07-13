@@ -673,9 +673,9 @@ class Mutation:
         )
 
     # Record a payment against an invoice and recompute its status.
-    # FINANCE only.
+    # ADMIN + FINANCE.
     @strawberry.mutation
-    @require_roles(UserRole.FINANCE)
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def log_payment(
         self,
         info: Info,
@@ -699,9 +699,10 @@ class Mutation:
             BillingService.recompute_status(invoice)
         return invoice
 
-    # Record a refund against an invoice and recompute its status. FINANCE only.
+    # Record a refund against an invoice and recompute its status.
+    # ADMIN + FINANCE.
     @strawberry.mutation
-    @require_roles(UserRole.FINANCE)
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def log_refund(
         self, info: Info, invoice_id: strawberry.ID, amount: Decimal
     ) -> InvoiceType:
