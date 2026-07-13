@@ -150,15 +150,16 @@ def test_finance_log_refund_reduces_balance(finance_client, invoice):
     assert data["status"] == "PARTIAL"
 
 
-def test_admin_cannot_log_payment(admin_client, invoice):
+def test_admin_can_log_payment(admin_client, invoice):
+    # ADMIN may record payments too (not just FINANCE).
     result = admin_client.execute(
         LOG_PAYMENT,
         {"invoiceId": str(invoice.id), "amount": "10000.00", "paidOn": "2026-01-20"},
     )
-    assert result["data"] is None
-    assert "Permission denied" in result["errors"][0]["message"]
+    assert result.get("errors") is None
+    assert result["data"]["logPayment"]["status"] == "PARTIAL"
     invoice.refresh_from_db()
-    assert invoice.status == InvoiceStatus.UNPAID
+    assert invoice.status == InvoiceStatus.PARTIAL
 
 
 def test_nurse_cannot_log_payment(nurse_client, invoice):

@@ -54,10 +54,14 @@ export default function DashboardPage() {
                 Log vitals
               </Link>
             </Button>
-            <Button variant="outline" className="h-[38px] gap-2">
-              <Banknote className="h-4 w-4" />
-              Log payment
-            </Button>
+            {showBilling ? (
+              <Button asChild variant="outline" className="h-[38px] gap-2">
+                <Link href="/fees-due">
+                  <Banknote className="h-4 w-4" />
+                  Log payment
+                </Link>
+              </Button>
+            ) : null}
           </div>
         </div>
 
