@@ -11,6 +11,7 @@ import {
   Activity,
   Wallet,
   Banknote,
+  Receipt,
   ShieldCheck,
   Settings,
   LogOut,
@@ -53,6 +54,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { label: "Fees due", href: "/fees-due", icon: Wallet, badge: "11" },
       { label: "Record payment", href: "/payments/new", icon: Banknote },
+      { label: "Change fee", href: "/fees/change", icon: Receipt },
     ],
   },
   {

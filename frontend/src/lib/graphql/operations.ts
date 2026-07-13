@@ -103,6 +103,12 @@ export const PATIENT = gql`
         admissionDate
         monthlyFee
         creditBalance
+        nextFeeCycleDate
+        activeFee {
+          id
+          amount
+          effectiveFrom
+        }
         hasOutstandingDues
         outstandingInvoiceCount
         bed {
@@ -332,6 +338,49 @@ export const LOG_PAYMENT = gql`
       status
       amountPaid
       balanceDue
+    }
+  }
+`;
+
+export const FEE_HISTORY = gql`
+  query FeeHistory($patientId: ID!) {
+    feeHistory(patientId: $patientId) {
+      id
+      amount
+      effectiveFrom
+      isActive
+      reason
+      createdAt
+      createdBy {
+        email
+      }
+      admission {
+        id
+        admissionDate
+      }
+    }
+  }
+`;
+
+export const CHANGE_FEE = gql`
+  mutation ChangeFee(
+    $admissionId: ID!
+    $amount: Decimal!
+    $reason: String!
+    $effectiveFrom: Date
+    $override: Boolean
+  ) {
+    changeFee(
+      admissionId: $admissionId
+      amount: $amount
+      reason: $reason
+      effectiveFrom: $effectiveFrom
+      override: $override
+    ) {
+      id
+      amount
+      effectiveFrom
+      isActive
     }
   }
 `;
