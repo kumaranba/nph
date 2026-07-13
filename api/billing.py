@@ -98,7 +98,7 @@ class BillingService:
             or Decimal("0")
         )
         base_fee = admission.monthly_fee
-        return Invoice.objects.create(
+        invoice = Invoice.objects.create(
             admission=admission,
             billing_period_start=start,
             billing_period_end=end,
@@ -106,6 +106,10 @@ class BillingService:
             total_due=base_fee + charges_total,
             status=InvoiceStatus.UNPAID,
         )
+        # Draw down any advance credit against the fresh invoice.
+        cls.apply_credit(admission)
+        invoice.refresh_from_db()
+        return invoice
 
     @classmethod
     def generate_all_due_invoices(cls, as_of: date = None):
@@ -147,3 +151,91 @@ class BillingService:
             invoice.status = InvoiceStatus.PAID
         invoice.save(update_fields=["status"])
         return invoice
+
+    @classmethod
+    def balance_due(cls, invoice: Invoice) -> Decimal:
+        return (
+            invoice.total_due
+            - (invoice.refund_amount or Decimal("0"))
+            - cls.amount_paid(invoice)
+        )
+
+    # -------------------------------------------------------- credit + payments
+    @classmethod
+    def apply_credit(cls, admission):
+        """Draw down the admission's credit balance against its unpaid invoices,
+        oldest-first. Credit-funded payments have no recorder. Returns the list
+        of ``(invoice, amount_applied)`` allocations made."""
+        from .models import Payment
+
+        allocations = []
+        credit = admission.credit_balance or Decimal("0")
+        if credit <= 0:
+            return allocations
+
+        unpaid = admission.invoices.filter(
+            status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+        ).order_by("billing_period_start")
+        for invoice in unpaid:
+            if credit <= 0:
+                break
+            due = cls.balance_due(invoice)
+            if due <= 0:
+                continue
+            applied = min(credit, due)
+            Payment.objects.create(
+                invoice=invoice,
+                amount=applied,
+                paid_on=date.today(),
+                recorded_by=None,  # applied from advance credit
+            )
+            cls.recompute_status(invoice)
+            credit -= applied
+            allocations.append((invoice, applied))
+
+        if allocations:
+            admission.credit_balance = credit
+            admission.save(update_fields=["credit_balance"])
+        return allocations
+
+    @classmethod
+    @transaction.atomic
+    def record_payment_for_admission(cls, admission, amount, paid_on, recorded_by):
+        """Record a payment for an admission. Clears outstanding invoices
+        oldest-first; any surplus is held as advance credit on the admission
+        (applied automatically as future monthly invoices come due).
+
+        Returns ``(allocations, credit_added)`` where each allocation is
+        ``(invoice, amount_applied)``.
+        """
+        from .models import Payment
+
+        remaining = Decimal(amount)
+        allocations = []
+
+        outstanding = admission.invoices.filter(
+            status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+        ).order_by("billing_period_start")
+        for invoice in outstanding:
+            if remaining <= 0:
+                break
+            due = cls.balance_due(invoice)
+            if due <= 0:
+                continue
+            applied = min(remaining, due)
+            Payment.objects.create(
+                invoice=invoice,
+                amount=applied,
+                paid_on=paid_on,
+                recorded_by=recorded_by,
+            )
+            cls.recompute_status(invoice)
+            remaining -= applied
+            allocations.append((invoice, applied))
+
+        credit_added = remaining
+        if credit_added > 0:
+            admission.credit_balance = (admission.credit_balance or Decimal("0")) + credit_added
+            admission.save(update_fields=["credit_balance"])
+
+        return allocations, credit_added

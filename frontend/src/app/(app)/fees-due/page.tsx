@@ -1,9 +1,11 @@
 "use client";
 
 import { useQuery } from "@apollo/client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -105,10 +107,17 @@ export default function FeesDuePage() {
     <main className="mx-auto min-h-screen max-w-3xl p-8">
       <Card>
         <CardHeader>
-          <CardTitle>Fees due</CardTitle>
-          <CardDescription>
-            Patients with an upcoming billing cycle date
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Fees due</CardTitle>
+              <CardDescription>
+                Patients with an upcoming billing cycle date
+              </CardDescription>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/payments/new">Record payment</Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-end gap-2">
