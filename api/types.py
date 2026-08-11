@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 
@@ -85,11 +86,36 @@ class AdmissionType:
     def admitting_doctor(self) -> str:
         return self.patient.admitting_doctor
 
+    # The admission's currently-active fee, if any.
+    @strawberry.field
+    def active_fee(self) -> Optional['FeeType']:
+        return self.fees.filter(is_active=True).first()
+
+    # Default effective date for a fee change (next not-yet-invoiced cycle).
+    @strawberry.field
+    def next_fee_cycle_date(self) -> date:
+        from .fees import FeeService
+        return FeeService.next_uninvoiced_cycle(self)
+
+
+@strawberry_django.type(models.Fee)
+class FeeType:
+    id: auto
+    admission: AdmissionType
+    amount: auto
+    effective_from: auto
+    is_active: auto
+    reason: auto
+    created_by: Optional[UserType]
+    created_at: auto
+    deactivated_at: auto
+
 
 @strawberry_django.type(models.Invoice)
 class InvoiceType:
     id: auto
     admission: AdmissionType
+    fee: Optional['FeeType']
     billing_period_start: auto
     billing_period_end: auto
     base_fee: auto

@@ -14,6 +14,7 @@ from api.models import (
     AdmissionStatus,
     Bed,
     BedStatus,
+    Fee,
     Invoice,
     InvoiceStatus,
     Patient,
@@ -124,10 +125,18 @@ def test_fee_status_current_without_invoices(admin_client, patient):
     assert _fee_status(admin_client, patient) == "CURRENT"
 
 
+def _fee_for(admission):
+    return admission.active_fee or Fee.objects.create(
+        admission=admission, amount=admission.monthly_fee,
+        effective_from=admission.admission_date, is_active=True, reason="test",
+    )
+
+
 def test_fee_status_overdue(admin_client, patient):
     admission = patient.admissions.first()
     Invoice.objects.create(
         admission=admission,
+        fee=_fee_for(admission),
         billing_period_start=date.today() - timedelta(days=40),
         billing_period_end=date.today() - timedelta(days=10),
         base_fee=Decimal("25000.00"),
@@ -141,6 +150,7 @@ def test_fee_status_due_soon(admin_client, patient):
     admission = patient.admissions.first()
     Invoice.objects.create(
         admission=admission,
+        fee=_fee_for(admission),
         billing_period_start=date.today() - timedelta(days=20),
         billing_period_end=date.today() + timedelta(days=3),
         base_fee=Decimal("25000.00"),
