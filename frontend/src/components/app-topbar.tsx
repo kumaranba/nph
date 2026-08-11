@@ -10,7 +10,7 @@ export function AppTopbar({ title }: { title: string }) {
   const me = useMe();
 
   return (
-    <header className="sticky top-0 z-20 flex h-[61px] shrink-0 items-center gap-4 border-b bg-background/80 px-6 backdrop-blur">
+    <header className="sticky top-0 z-20 hidden h-[61px] shrink-0 items-center gap-4 border-b bg-background/80 px-6 backdrop-blur lg:flex">
       <div className="text-sm font-semibold">{title}</div>
 
       <div className="relative ml-2 hidden md:block">

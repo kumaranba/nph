@@ -80,7 +80,7 @@ export default function SearchPage() {
   const showEmpty = trimmed !== "" && !loading && !error && rows.length === 0;
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl p-8">
+    <main className="mx-auto min-h-screen max-w-3xl p-4 sm:p-6 lg:p-8">
       <Card>
         <CardHeader>
           <CardTitle>Search patients</CardTitle>
@@ -112,42 +112,71 @@ export default function SearchPage() {
               description={`No patients match “${trimmed}”.`}
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Patient</th>
-                    <th className="py-2 pr-4 font-medium">Patient ID</th>
-                    <th className="py-2 pr-4 font-medium">Bed</th>
-                    <th className="py-2 pr-4 font-medium">Admitted</th>
-                    <th className="py-2 font-medium">Fee status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-muted/50"
-                      onClick={() => router.push(`/patients/${row.id}`)}
-                    >
-                      <td className="py-2 pr-4">{row.name}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">
+            <>
+              {/* Mobile: stacked cards */}
+              <div className="space-y-2.5 sm:hidden">
+                {rows.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => router.push(`/patients/${row.id}`)}
+                    className="flex w-full items-start justify-between gap-3 rounded-lg border bg-card p-3 text-left active:bg-muted/50"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium">{row.name}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
                         {row.patientId}
-                      </td>
-                      <td className="py-2 pr-4">
+                      </div>
+                      <div className="mt-1.5 text-xs text-muted-foreground">
                         {row.room && row.bed
                           ? `${row.room} · ${row.bed}`
-                          : "—"}
-                      </td>
-                      <td className="py-2 pr-4">{row.admissionDate ?? "—"}</td>
-                      <td className="py-2">
-                        <FeeBadge status={row.feeStatus} />
-                      </td>
+                          : "Not admitted"}
+                        {row.admissionDate ? ` · ${row.admissionDate}` : ""}
+                      </div>
+                    </div>
+                    <FeeBadge status={row.feeStatus} />
+                  </button>
+                ))}
+              </div>
+
+              {/* Tablet/desktop: table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Patient</th>
+                      <th className="py-2 pr-4 font-medium">Patient ID</th>
+                      <th className="py-2 pr-4 font-medium">Bed</th>
+                      <th className="py-2 pr-4 font-medium">Admitted</th>
+                      <th className="py-2 font-medium">Fee status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="cursor-pointer border-b last:border-0 hover:bg-muted/50"
+                        onClick={() => router.push(`/patients/${row.id}`)}
+                      >
+                        <td className="py-2 pr-4">{row.name}</td>
+                        <td className="py-2 pr-4 font-mono text-xs">
+                          {row.patientId}
+                        </td>
+                        <td className="py-2 pr-4">
+                          {row.room && row.bed
+                            ? `${row.room} · ${row.bed}`
+                            : "—"}
+                        </td>
+                        <td className="py-2 pr-4">{row.admissionDate ?? "—"}</td>
+                        <td className="py-2">
+                          <FeeBadge status={row.feeStatus} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -80,7 +80,7 @@ export default function InvoiceDetailPage() {
 
   if (!hasToken || loading) {
     return (
-      <main className="mx-auto min-h-screen max-w-2xl p-8">
+      <main className="mx-auto min-h-screen max-w-2xl p-4 sm:p-6 lg:p-8">
         <LinesSkeleton lines={8} />
       </main>
     );
@@ -88,7 +88,7 @@ export default function InvoiceDetailPage() {
 
   if (error) {
     return (
-      <main className="mx-auto min-h-screen max-w-2xl p-8">
+      <main className="mx-auto min-h-screen max-w-2xl p-4 sm:p-6 lg:p-8">
         <QueryError message={error.message} onRetry={() => refetch()} />
       </main>
     );
@@ -101,7 +101,7 @@ export default function InvoiceDetailPage() {
 
   if (!invoice) {
     return (
-      <main className="mx-auto min-h-screen max-w-2xl p-8">
+      <main className="mx-auto min-h-screen max-w-2xl p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
             <CardTitle>Invoice not found</CardTitle>
@@ -115,7 +115,7 @@ export default function InvoiceDetailPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl p-8">
+    <main className="mx-auto min-h-screen max-w-2xl p-4 sm:p-6 lg:p-8">
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
