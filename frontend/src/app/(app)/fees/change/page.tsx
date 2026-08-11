@@ -156,7 +156,7 @@ export default function ChangeFeePage() {
 
   if (!hasToken || meLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
+      <main className="flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-8">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </main>
     );
@@ -164,7 +164,7 @@ export default function ChangeFeePage() {
 
   if (!canView) {
     return (
-      <main className="mx-auto min-h-screen max-w-2xl p-8">
+      <main className="mx-auto min-h-screen max-w-2xl p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
             <CardTitle>Not authorized</CardTitle>
@@ -178,7 +178,7 @@ export default function ChangeFeePage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl space-y-5 p-6">
+    <main className="mx-auto min-h-screen max-w-2xl space-y-5 p-4 sm:p-6">
       <h1 className="text-xl font-semibold">Change fee</h1>
 
       {/* Patient picker */}
@@ -264,7 +264,7 @@ export default function ChangeFeePage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="amount">New amount</Label>
                   <Input
@@ -337,44 +337,78 @@ export default function ChangeFeePage() {
             ) : (historyData?.feeHistory.length ?? 0) === 0 ? (
               <EmptyState title="No fee history" />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="py-2 pr-4 font-medium">Amount</th>
-                      <th className="py-2 pr-4 font-medium">Effective</th>
-                      <th className="py-2 pr-4 font-medium">Status</th>
-                      <th className="py-2 pr-4 font-medium">Reason</th>
-                      <th className="py-2 font-medium">By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyData!.feeHistory.map((f) => (
-                      <tr key={f.id} className="border-b last:border-0">
-                        <td className="py-2 pr-4">{money(f.amount)}</td>
-                        <td className="py-2 pr-4">{f.effectiveFrom}</td>
-                        <td className="py-2 pr-4">
-                          {f.isActive ? (
-                            <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                              Active
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              Inactive
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          {f.reason || "—"}
-                        </td>
-                        <td className="py-2 text-xs text-muted-foreground">
-                          {f.createdBy?.email ?? "system"}
-                        </td>
+              <>
+                {/* Mobile: stacked cards */}
+                <div className="space-y-2.5 sm:hidden">
+                  {historyData!.feeHistory.map((f) => (
+                    <div
+                      key={f.id}
+                      className="rounded-lg border bg-card p-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold">{money(f.amount)}</span>
+                        {f.isActive ? (
+                          <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Effective {f.effectiveFrom} · {f.createdBy?.email ?? "system"}
+                      </div>
+                      {f.reason ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {f.reason}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tablet/desktop: table */}
+                <div className="hidden overflow-x-auto sm:block">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Amount</th>
+                        <th className="py-2 pr-4 font-medium">Effective</th>
+                        <th className="py-2 pr-4 font-medium">Status</th>
+                        <th className="py-2 pr-4 font-medium">Reason</th>
+                        <th className="py-2 font-medium">By</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {historyData!.feeHistory.map((f) => (
+                        <tr key={f.id} className="border-b last:border-0">
+                          <td className="py-2 pr-4">{money(f.amount)}</td>
+                          <td className="py-2 pr-4">{f.effectiveFrom}</td>
+                          <td className="py-2 pr-4">
+                            {f.isActive ? (
+                              <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                Active
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                Inactive
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-muted-foreground">
+                            {f.reason || "—"}
+                          </td>
+                          <td className="py-2 text-xs text-muted-foreground">
+                            {f.createdBy?.email ?? "system"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

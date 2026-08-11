@@ -66,7 +66,7 @@ export default function PatientProfilePage() {
 
   if (!hasToken || loading) {
     return (
-      <main className="mx-auto min-h-screen w-full max-w-md p-8">
+      <main className="mx-auto min-h-screen w-full max-w-md p-4 sm:p-6 lg:p-8">
         <LinesSkeleton lines={6} />
       </main>
     );
@@ -74,7 +74,7 @@ export default function PatientProfilePage() {
 
   if (error) {
     return (
-      <main className="mx-auto min-h-screen w-full max-w-md p-8">
+      <main className="mx-auto min-h-screen w-full max-w-md p-4 sm:p-6 lg:p-8">
         <QueryError message={error.message} onRetry={() => refetch()} />
       </main>
     );
@@ -98,7 +98,7 @@ export default function PatientProfilePage() {
       : undefined);
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-md space-y-6 p-8">
+    <main className="mx-auto min-h-screen w-full max-w-md space-y-6 p-4 sm:p-6 lg:p-8">
       <Card>
         <CardHeader>
           <CardTitle>{patient ? patient.name : "Patient not found"}</CardTitle>

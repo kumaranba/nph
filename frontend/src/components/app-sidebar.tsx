@@ -3,68 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useApolloClient } from "@apollo/client";
-import {
-  LayoutDashboard,
-  Search,
-  UserPlus,
-  HeartPulse,
-  Activity,
-  Wallet,
-  Banknote,
-  Receipt,
-  ShieldCheck,
-  Settings,
-  LogOut,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { clearTokens } from "@/lib/auth";
 import { useMe, ROLE_LABEL } from "@/lib/me-context";
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
-};
-type NavSection = { title: string; items: NavItem[] };
-
-// Routes mirror the existing app/ file tree.
-const SECTIONS: NavSection[] = [
-  {
-    title: "Overview",
-    items: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
-  },
-  {
-    title: "Patients",
-    items: [
-      { label: "Search", href: "/search", icon: Search },
-      { label: "New admission", href: "/admissions/new", icon: UserPlus },
-    ],
-  },
-  {
-    title: "Clinical",
-    items: [
-      { label: "Record vitals", href: "/vitals/new", icon: HeartPulse },
-      { label: "Vitals history", href: "/vitals/history", icon: Activity },
-    ],
-  },
-  {
-    title: "Billing",
-    items: [
-      { label: "Fees due", href: "/fees-due", icon: Wallet, badge: "11" },
-      { label: "Record payment", href: "/payments/new", icon: Banknote },
-      { label: "Change fee", href: "/fees/change", icon: Receipt },
-    ],
-  },
-  {
-    title: "Administration",
-    items: [
-      { label: "Users & roles", href: "/users", icon: ShieldCheck },
-      { label: "Settings", href: "/settings", icon: Settings },
-    ],
-  },
-];
+import { NAV_SECTIONS as SECTIONS } from "@/lib/nav-config";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -81,7 +25,7 @@ export function AppSidebar() {
   const userInitials = (me?.email ?? "?").slice(0, 2).toUpperCase();
 
   return (
-    <aside className="sticky top-0 flex h-screen w-[252px] shrink-0 flex-col border-r bg-sidebar">
+    <aside className="sticky top-0 hidden h-screen w-[252px] shrink-0 flex-col border-r bg-sidebar lg:flex">
       {/* Brand */}
       <div className="flex items-center gap-3 border-b px-[18px] py-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">

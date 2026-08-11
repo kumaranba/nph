@@ -30,7 +30,7 @@ export default function DashboardPage() {
     <>
       <AppTopbar title="Dashboard" />
 
-      <main className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 p-[22px] pb-10 md:px-6">
+      <main className="mx-auto flex w-full max-w-[1520px] flex-col gap-5 p-4 pb-10 sm:p-[22px] md:px-6">
         {/* Page header */}
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
