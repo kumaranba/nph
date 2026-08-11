@@ -162,7 +162,7 @@ export default function NewVitalReadingPage() {
 
   if (!hasToken || meLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-6">
+      <main className="flex min-h-screen items-center justify-center p-4 sm:p-6">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </main>
     );
@@ -170,7 +170,7 @@ export default function NewVitalReadingPage() {
 
   if (!allowed) {
     return (
-      <main className="mx-auto min-h-screen max-w-md p-6">
+      <main className="mx-auto min-h-screen max-w-md p-4 sm:p-6">
         <Card>
           <CardHeader>
             <CardTitle>Not authorized</CardTitle>

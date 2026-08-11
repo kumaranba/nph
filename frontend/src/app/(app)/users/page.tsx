@@ -90,7 +90,7 @@ export default function UsersPage() {
 
   if (!hasToken || meLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
+      <main className="flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-8">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </main>
     );
@@ -98,7 +98,7 @@ export default function UsersPage() {
 
   if (!isAdmin) {
     return (
-      <main className="mx-auto min-h-screen max-w-2xl p-8">
+      <main className="mx-auto min-h-screen max-w-2xl p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
             <CardTitle>Not authorized</CardTitle>
@@ -114,7 +114,7 @@ export default function UsersPage() {
   const users = data?.users ?? [];
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl space-y-6 p-6">
+    <main className="mx-auto min-h-screen max-w-3xl space-y-6 p-4 sm:p-6">
       <h1 className="text-xl font-semibold">User management</h1>
 
       {/* User list */}
@@ -133,24 +133,24 @@ export default function UsersPage() {
           ) : users.length === 0 ? (
             <EmptyState title="No users" />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Email</th>
-                    <th className="py-2 pr-4 font-medium">Role</th>
-                    <th className="py-2 pr-4 font-medium">Status</th>
-                    <th className="py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{u.email}</td>
-                      <td className="py-2 pr-4">{u.role}</td>
-                      <td className="py-2 pr-4">
+            <>
+              {/* Mobile: stacked cards */}
+              <div className="space-y-2.5 sm:hidden">
+                {users.map((u) => (
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {u.email}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {u.role}
+                        </span>
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
                             u.isActive
                               ? "bg-green-100 text-green-800"
                               : "bg-gray-200 text-gray-600"
@@ -158,34 +158,82 @@ export default function UsersPage() {
                         >
                           {u.isActive ? "Active" : "Inactive"}
                         </span>
-                      </td>
-                      <td className="py-2 text-right">
-                        {u.isActive && u.id !== myId ? (
-                          <button
-                            type="button"
-                            className="text-xs text-red-600 hover:underline"
-                            onClick={() =>
-                              deactivateUser({ variables: { userId: u.id } })
-                            }
-                          >
-                            Deactivate
-                          </button>
-                        ) : u.id === myId ? (
-                          <span className="text-xs text-muted-foreground">
-                            You
-                          </span>
-                        ) : null}
-                      </td>
+                      </div>
+                    </div>
+                    {u.isActive && u.id !== myId ? (
+                      <button
+                        type="button"
+                        className="shrink-0 text-xs font-medium text-red-600 active:underline"
+                        onClick={() =>
+                          deactivateUser({ variables: { userId: u.id } })
+                        }
+                      >
+                        Deactivate
+                      </button>
+                    ) : u.id === myId ? (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        You
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+
+              {/* Tablet/desktop: table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Email</th>
+                      <th className="py-2 pr-4 font-medium">Role</th>
+                      <th className="py-2 pr-4 font-medium">Status</th>
+                      <th className="py-2" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} className="border-b last:border-0">
+                        <td className="py-2 pr-4">{u.email}</td>
+                        <td className="py-2 pr-4">{u.role}</td>
+                        <td className="py-2 pr-4">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                              u.isActive
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-200 text-gray-600"
+                            }`}
+                          >
+                            {u.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right">
+                          {u.isActive && u.id !== myId ? (
+                            <button
+                              type="button"
+                              className="text-xs text-red-600 hover:underline"
+                              onClick={() =>
+                                deactivateUser({ variables: { userId: u.id } })
+                              }
+                            >
+                              Deactivate
+                            </button>
+                          ) : u.id === myId ? (
+                            <span className="text-xs text-muted-foreground">
+                              You
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {deactivateError ? (
                 <p className="mt-2 text-sm text-red-600">
                   {deactivateError.message}
                 </p>
               ) : null}
-            </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -117,7 +117,7 @@ export default function RecordPaymentPage() {
 
   if (!hasToken || meLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
+      <main className="flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-8">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </main>
     );
@@ -125,7 +125,7 @@ export default function RecordPaymentPage() {
 
   if (!allowed) {
     return (
-      <main className="mx-auto min-h-screen max-w-2xl p-8">
+      <main className="mx-auto min-h-screen max-w-2xl p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
             <CardTitle>Not authorized</CardTitle>
@@ -139,7 +139,7 @@ export default function RecordPaymentPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-lg space-y-5 p-6">
+    <main className="mx-auto min-h-screen max-w-lg space-y-5 p-4 sm:p-6">
       <h1 className="text-xl font-semibold">Record payment</h1>
 
       {/* Patient picker */}
