@@ -24,7 +24,8 @@ test("user can log in and land on the authenticated dashboard", async ({ page })
   // label ("Administrator" for ADMIN). The role label appears in both the
   // sidebar and topbar, so match the first occurrence.
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText("admin@nph.test")).toBeVisible();
+  // Email/role also appear in activity items, so match the first (sidebar).
+  await expect(page.getByText("admin@nph.test").first()).toBeVisible();
   await expect(page.getByText("Administrator").first()).toBeVisible();
 });
 

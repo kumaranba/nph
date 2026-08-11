@@ -82,7 +82,7 @@ export default function FeesDuePage() {
 
   if (!hasToken || meLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
+      <main className="flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-8">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </main>
     );
@@ -90,7 +90,7 @@ export default function FeesDuePage() {
 
   if (!allowed) {
     return (
-      <main className="mx-auto min-h-screen max-w-3xl p-8">
+      <main className="mx-auto min-h-screen max-w-3xl p-4 sm:p-6 lg:p-8">
         <Card>
           <CardHeader>
             <CardTitle>Not authorized</CardTitle>
@@ -104,7 +104,7 @@ export default function FeesDuePage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl p-8">
+    <main className="mx-auto min-h-screen max-w-3xl p-4 sm:p-6 lg:p-8">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -145,50 +145,92 @@ export default function FeesDuePage() {
               description="No patients have a billing cycle date in this window."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Patient</th>
-                    <th className="py-2 pr-4 font-medium">ID</th>
-                    <th className="py-2 pr-4 font-medium">Room</th>
-                    <th className="py-2 pr-4 font-medium">
-                      <button
-                        type="button"
-                        className="flex items-center gap-1 font-medium hover:text-foreground"
-                        onClick={() => setSortAsc((v) => !v)}
-                      >
-                        Due date {sortAsc ? "▲" : "▼"}
-                      </button>
-                    </th>
-                    <th className="py-2 pr-4 font-medium">Days</th>
-                    <th className="py-2 text-right font-medium">Amount due</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-muted/50"
-                      onClick={() => router.push(`/patients/${row.id}`)}
-                    >
-                      <td className="py-2 pr-4">{row.name}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">
+            <>
+              {/* Sort control (drives both card list and table). */}
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                onClick={() => setSortAsc((v) => !v)}
+              >
+                Sort by due date {sortAsc ? "▲" : "▼"}
+              </button>
+
+              {/* Mobile: stacked cards */}
+              <div className="space-y-2.5 sm:hidden">
+                {rows.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => router.push(`/patients/${row.id}`)}
+                    className="flex w-full items-start justify-between gap-3 rounded-lg border bg-card p-3 text-left active:bg-muted/50"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium">{row.name}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
                         {row.patientId}
-                      </td>
-                      <td className="py-2 pr-4">{row.room ?? "—"}</td>
-                      <td className="py-2 pr-4">{row.dueDate}</td>
-                      <td className="py-2 pr-4">
-                        {row.daysUntilDue === 0
-                          ? "Today"
-                          : `${row.daysUntilDue}d`}
-                      </td>
-                      <td className="py-2 text-right">{money(row.amountDue)}</td>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                        <span>{row.room ?? "—"}</span>
+                        <span>
+                          Due{" "}
+                          <b className="font-medium text-foreground">
+                            {row.daysUntilDue === 0
+                              ? "Today"
+                              : `in ${row.daysUntilDue}d`}
+                          </b>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-semibold">{money(row.amountDue)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.dueDate}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Tablet/desktop: table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Patient</th>
+                      <th className="py-2 pr-4 font-medium">ID</th>
+                      <th className="py-2 pr-4 font-medium">Room</th>
+                      <th className="py-2 pr-4 font-medium">Due date</th>
+                      <th className="py-2 pr-4 font-medium">Days</th>
+                      <th className="py-2 text-right font-medium">Amount due</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="cursor-pointer border-b last:border-0 hover:bg-muted/50"
+                        onClick={() => router.push(`/patients/${row.id}`)}
+                      >
+                        <td className="py-2 pr-4">{row.name}</td>
+                        <td className="py-2 pr-4 font-mono text-xs">
+                          {row.patientId}
+                        </td>
+                        <td className="py-2 pr-4">{row.room ?? "—"}</td>
+                        <td className="py-2 pr-4">{row.dueDate}</td>
+                        <td className="py-2 pr-4">
+                          {row.daysUntilDue === 0
+                            ? "Today"
+                            : `${row.daysUntilDue}d`}
+                        </td>
+                        <td className="py-2 text-right">
+                          {money(row.amountDue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

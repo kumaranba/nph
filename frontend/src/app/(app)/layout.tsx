@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileNav } from "@/components/mobile-nav";
 import { MeProvider, type Me } from "@/lib/me-context";
 import { clearTokens, getAccessToken } from "@/lib/auth";
 import { ME } from "@/lib/graphql/operations";
@@ -51,8 +52,13 @@ export default function AppLayout({
   return (
     <MeProvider value={data?.me ?? null}>
       <div className="flex min-h-screen w-full bg-background">
+        {/* Sidebar is desktop-only; mobile/tablet use MobileNav. */}
         <AppSidebar />
-        <div className="flex min-w-0 flex-1 flex-col bg-muted/40">{children}</div>
+        <div className="flex min-w-0 flex-1 flex-col bg-muted/40">
+          <MobileNav />
+          {/* Bottom padding clears the fixed mobile tab bar. */}
+          <div className="flex-1 pb-16 lg:pb-0">{children}</div>
+        </div>
       </div>
     </MeProvider>
   );

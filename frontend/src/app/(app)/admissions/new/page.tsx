@@ -112,7 +112,7 @@ export default function NewAdmissionPage() {
   if (!hasToken) return null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-8">
+    <main className="flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-8">
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>New Admission</CardTitle>
@@ -135,7 +135,7 @@ export default function NewAdmissionPage() {
             </div>
 
             {/* Age + admission date */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="age">Age</Label>
                 <Input
@@ -197,7 +197,7 @@ export default function NewAdmissionPage() {
             </div>
 
             {/* Bed picker (VACANT only) + monthly fee */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="bedId">Bed</Label>
                 <select
@@ -250,7 +250,7 @@ export default function NewAdmissionPage() {
             </div>
 
             {/* Guardian (optional) */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="guardianName">Guardian name (optional)</Label>
                 <Input id="guardianName" {...register("guardianName")} />

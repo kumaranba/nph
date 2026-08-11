@@ -33,7 +33,7 @@ export function KpiCards() {
   const vacant = s ? s.bedsTotal - s.bedsOccupied : 0;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       {/* Bed occupancy */}
       <Card className="p-[18px] shadow-none">
         <div className="flex items-start justify-between">
