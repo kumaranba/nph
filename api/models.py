@@ -87,6 +87,12 @@ class Bed(models.Model):
 # Patient
 # ---------------------------------------------------------------------------
 
+class Gender(models.TextChoices):
+    MALE = 'MALE', 'Male'
+    FEMALE = 'FEMALE', 'Female'
+    OTHER = 'OTHER', 'Other'
+
+
 class Patient(models.Model):
     """
     patient_id is auto-generated as NPH-YYYY-NNNN on first save.
@@ -95,6 +101,7 @@ class Patient(models.Model):
     patient_id = models.CharField(max_length=20, unique=True, editable=False)
     name = models.CharField(max_length=255)
     age = models.PositiveIntegerField()
+    gender = models.CharField(max_length=10, choices=Gender.choices, blank=True)
     diagnosis = models.TextField()
     guardian_name = models.CharField(max_length=255, blank=True)
     guardian_phone = models.CharField(max_length=20, blank=True)

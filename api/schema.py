@@ -15,9 +15,9 @@ from . import auth, dashboard, vitals
 from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
-    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee, Invoice,
-    InvoiceStatus, Patient, Payment, Room, SystemSetting, User, UserRole,
-    VitalReading, VitalsThreshold,
+    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee, Gender,
+    Invoice, InvoiceStatus, Patient, Payment, Room, SystemSetting, User,
+    UserRole, VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
@@ -46,6 +46,14 @@ class ChargeCategoryEnum(Enum):
     SNACKS = 'SNACKS'
     PERSONAL_CARE = 'PERSONAL_CARE'
     SPECIALIST = 'SPECIALIST'
+    OTHER = 'OTHER'
+
+
+@strawberry.enum
+class GenderEnum(Enum):
+    """GraphQL enum for Patient.gender (mirrors models.Gender)."""
+    MALE = 'MALE'
+    FEMALE = 'FEMALE'
     OTHER = 'OTHER'
 
 
@@ -127,6 +135,7 @@ class CreateAdmissionInput:
     # Optional patient details
     guardian_name: Optional[str] = ""
     guardian_phone: Optional[str] = ""
+    gender: Optional[GenderEnum] = None
 
 
 # Number of days before an invoice's period end that we flag it "due soon".
@@ -881,6 +890,7 @@ class Mutation:
             patient = Patient.objects.create(
                 name=input.name.strip(),
                 age=input.age,
+                gender=input.gender.value if input.gender else '',
                 diagnosis=input.diagnosis,
                 guardian_name=input.guardian_name or '',
                 guardian_phone=input.guardian_phone or '',
