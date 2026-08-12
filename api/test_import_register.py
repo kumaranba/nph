@@ -59,6 +59,18 @@ def test_valid_row_creates_patient_admission_invoice_and_bed(tmp_path, db):
     assert Invoice.objects.filter(admission=admission).count() == 1
 
 
+def test_register_slash_date_with_two_digit_year(tmp_path, db):
+    # The real register export is day-first with a 2-digit year (30/08/25).
+    path = _write_csv(
+        tmp_path,
+        "1,Prabakaran,M,30/08/23,15500,MW3,",
+    )
+    output = _run(path)
+    assert "Imported 1 patient" in output
+    admission = Admission.objects.get(patient__name="Prabakaran")
+    assert admission.admission_date.isoformat() == "2023-08-30"
+
+
 def test_beds_auto_number_within_a_ward(tmp_path, db):
     path = _write_csv(
         tmp_path,
@@ -140,7 +152,7 @@ def test_unrecognized_gender_warns_and_leaves_blank(tmp_path, db):
     "row, expected_error",
     [
         ("1,,F,15-01-2026,25000,FW1,", "Name is required"),
-        ("1,Bad Date,F,2026/01/15,25000,FW1,", "must be DD-MM-YYYY"),
+        ("1,Bad Date,F,2026/01/15,25000,FW1,", "must be a day-first date"),
         ("1,Bad Fee,F,15-01-2026,abc,FW1,", "not a valid number"),
     ],
 )
