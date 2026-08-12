@@ -93,6 +93,51 @@ class Gender(models.TextChoices):
     OTHER = 'OTHER', 'Other'
 
 
+class TagCategory(models.TextChoices):
+    BEHAVIOUR = 'BEHAVIOUR', 'Behaviour'
+    ILLNESS = 'ILLNESS', 'Illness'
+    OTHER = 'OTHER', 'Other'
+
+
+class Tag(models.Model):
+    """A shared, reusable label applied to patients (behaviour, illness type…).
+
+    ``name`` is the canonical, case-insensitive-unique key (lowercased); the
+    original spelling is preserved in ``label`` for display. Use
+    ``Tag.get_or_create_normalized`` to attach tags so spellings never
+    fragment the vocabulary.
+    """
+    name = models.CharField(max_length=50, unique=True)
+    label = models.CharField(max_length=50)
+    category = models.CharField(
+        max_length=10, choices=TagCategory.choices, default=TagCategory.OTHER
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.label
+
+    @classmethod
+    def get_or_create_normalized(cls, raw, category=None):
+        """Get or create a tag from a free-text spelling.
+
+        Matches case-insensitively on the trimmed value; the first spelling
+        seen becomes the display ``label``. Returns ``(tag, created)`` or
+        ``(None, False)`` for a blank value.
+        """
+        label = (raw or '').strip()
+        if not label:
+            return None, False
+        name = label.lower()
+        defaults = {'label': label}
+        if category:
+            defaults['category'] = category
+        return cls.objects.get_or_create(name=name, defaults=defaults)
+
+
 class Patient(models.Model):
     """
     patient_id is auto-generated as NPH-YYYY-NNNN on first save.
@@ -106,6 +151,7 @@ class Patient(models.Model):
     guardian_name = models.CharField(max_length=255, blank=True)
     guardian_phone = models.CharField(max_length=20, blank=True)
     admitting_doctor = models.CharField(max_length=255)
+    tags = models.ManyToManyField('Tag', related_name='patients', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

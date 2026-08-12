@@ -12,14 +12,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { TagChip, TagInput } from "@/components/tag-input";
 import {
   EmptyState,
   QueryError,
   TableSkeleton,
 } from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
-import { SEARCH_PATIENTS } from "@/lib/graphql/operations";
+import { PATIENTS_BY_TAGS, SEARCH_PATIENTS } from "@/lib/graphql/operations";
 import { useDebounce } from "@/lib/use-debounce";
+import { cn } from "@/lib/utils";
 
 type SearchRow = {
   id: string;
@@ -31,9 +33,11 @@ type SearchRow = {
   room: string | null;
   bed: string | null;
   feeStatus: "CURRENT" | "DUE_SOON" | "OVERDUE";
+  tags: string[];
 };
 
 type SearchResult = { searchPatients: SearchRow[] };
+type TagSearchResult = { patientsByTags: SearchRow[] };
 
 const FEE_BADGE: Record<
   SearchRow["feeStatus"],
@@ -58,6 +62,8 @@ function FeeBadge({ status }: { status: SearchRow["feeStatus"] }) {
 export default function SearchPage() {
   const router = useRouter();
   const [term, setTerm] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [match, setMatch] = useState<"ANY" | "ALL">("ANY");
   const debouncedTerm = useDebounce(term, 300); // 300ms debounce
 
   const hasToken = getAccessToken() !== null;
@@ -65,19 +71,40 @@ export default function SearchPage() {
     if (!hasToken) router.replace("/login");
   }, [hasToken, router]);
 
+  // Tag filter takes precedence; otherwise fall back to text search.
+  const byTags = tags.length > 0;
   const trimmed = debouncedTerm.trim();
-  const { data, loading, error, refetch } = useQuery<SearchResult>(
-    SEARCH_PATIENTS,
-    {
-      variables: { query: trimmed },
-      skip: !hasToken || trimmed === "",
-    }
-  );
+
+  const textQuery = useQuery<SearchResult>(SEARCH_PATIENTS, {
+    variables: { query: trimmed },
+    skip: !hasToken || byTags || trimmed === "",
+  });
+  const tagQuery = useQuery<TagSearchResult>(PATIENTS_BY_TAGS, {
+    variables: { tags, match },
+    skip: !hasToken || !byTags,
+  });
 
   if (!hasToken) return null;
 
-  const rows = data?.searchPatients ?? [];
-  const showEmpty = trimmed !== "" && !loading && !error && rows.length === 0;
+  const active = byTags ? tagQuery : textQuery;
+  const { loading, error, refetch } = active;
+  const rows: SearchRow[] = byTags
+    ? tagQuery.data?.patientsByTags ?? []
+    : textQuery.data?.searchPatients ?? [];
+
+  const hasCriteria = byTags || trimmed !== "";
+  const showEmpty = hasCriteria && !loading && !error && rows.length === 0;
+
+  function addTag(label: string) {
+    setTags((prev) =>
+      prev.some((t) => t.toLowerCase() === label.toLowerCase())
+        ? prev
+        : [...prev, label]
+    );
+  }
+  function removeTag(label: string) {
+    setTags((prev) => prev.filter((t) => t !== label));
+  }
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl p-4 sm:p-6 lg:p-8">
@@ -85,7 +112,7 @@ export default function SearchPage() {
         <CardHeader>
           <CardTitle>Search patients</CardTitle>
           <CardDescription>
-            Search by name, patient ID, or guardian name / phone
+            Search by name, patient ID, guardian, or filter by tags
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -97,10 +124,51 @@ export default function SearchPage() {
             onChange={(e) => setTerm(e.target.value)}
           />
 
-          {trimmed === "" ? (
+          {/* Tag filter */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-muted-foreground">
+                Filter by tags
+              </span>
+              {tags.length > 1 ? (
+                <div className="inline-flex overflow-hidden rounded-md border text-xs">
+                  {(["ANY", "ALL"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMatch(m)}
+                      className={cn(
+                        "px-2.5 py-1 font-medium",
+                        match === m
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground hover:bg-accent/60"
+                      )}
+                    >
+                      {m === "ANY" ? "Match any" : "Match all"}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map((t) => (
+                  <TagChip key={t} label={t} onRemove={() => removeTag(t)} />
+                ))}
+              </div>
+            ) : null}
+            <TagInput
+              exclude={tags}
+              allowCreate={false}
+              placeholder="Add a tag to filter…"
+              onSelect={addTag}
+            />
+          </div>
+
+          {!hasCriteria ? (
             <EmptyState
               title="Search for a patient"
-              description="Enter a name, patient ID, or guardian name / phone above."
+              description="Enter a name, patient ID, or guardian — or filter by tags above."
             />
           ) : loading ? (
             <TableSkeleton rows={4} cols={5} />
@@ -109,7 +177,11 @@ export default function SearchPage() {
           ) : showEmpty ? (
             <EmptyState
               title="No matches"
-              description={`No patients match “${trimmed}”.`}
+              description={
+                byTags
+                  ? `No patients match the selected tag${tags.length > 1 ? "s" : ""}.`
+                  : `No patients match “${trimmed}”.`
+              }
             />
           ) : (
             <>
@@ -133,6 +205,13 @@ export default function SearchPage() {
                           : "Not admitted"}
                         {row.admissionDate ? ` · ${row.admissionDate}` : ""}
                       </div>
+                      {row.tags.length > 0 ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {row.tags.map((t) => (
+                            <TagChip key={t} label={t} />
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <FeeBadge status={row.feeStatus} />
                   </button>
@@ -147,7 +226,7 @@ export default function SearchPage() {
                       <th className="py-2 pr-4 font-medium">Patient</th>
                       <th className="py-2 pr-4 font-medium">Patient ID</th>
                       <th className="py-2 pr-4 font-medium">Bed</th>
-                      <th className="py-2 pr-4 font-medium">Admitted</th>
+                      <th className="py-2 pr-4 font-medium">Tags</th>
                       <th className="py-2 font-medium">Fee status</th>
                     </tr>
                   </thead>
@@ -167,7 +246,17 @@ export default function SearchPage() {
                             ? `${row.room} · ${row.bed}`
                             : "—"}
                         </td>
-                        <td className="py-2 pr-4">{row.admissionDate ?? "—"}</td>
+                        <td className="py-2 pr-4">
+                          {row.tags.length > 0 ? (
+                            <span className="flex flex-wrap gap-1">
+                              {row.tags.map((t) => (
+                                <TagChip key={t} label={t} />
+                              ))}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td className="py-2">
                           <FeeBadge status={row.feeStatus} />
                         </td>
