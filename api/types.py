@@ -44,6 +44,7 @@ class PatientType:
     patient_id: auto
     name: auto
     age: auto
+    gender: auto
     diagnosis: auto
     guardian_name: auto
     guardian_phone: auto

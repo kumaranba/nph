@@ -40,6 +40,7 @@ type CreateAdmissionResult = {
 type AdmissionForm = {
   name: string;
   age: string;
+  gender: string;
   diagnosis: string;
   admittingDoctor: string;
   bedId: string;
@@ -66,6 +67,7 @@ export default function NewAdmissionPage() {
     defaultValues: {
       name: "",
       age: "",
+      gender: "",
       diagnosis: "",
       admittingDoctor: "",
       bedId: "",
@@ -97,6 +99,7 @@ export default function NewAdmissionPage() {
         input: {
           name: values.name,
           age: Number(values.age),
+          gender: values.gender || undefined,
           diagnosis: values.diagnosis,
           admittingDoctor: values.admittingDoctor,
           bedId: values.bedId,
@@ -134,8 +137,8 @@ export default function NewAdmissionPage() {
               ) : null}
             </div>
 
-            {/* Age + admission date */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Age + gender + admission date */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="age">Age</Label>
                 <Input
@@ -150,6 +153,20 @@ export default function NewAdmissionPage() {
                 {errors.age ? (
                   <p className="text-sm text-red-600">{errors.age.message}</p>
                 ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gender">Gender</Label>
+                <select
+                  id="gender"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  defaultValue=""
+                  {...register("gender")}
+                >
+                  <option value="">Unspecified</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="admissionDate">Admission date</Label>

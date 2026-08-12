@@ -18,7 +18,7 @@ mutation Create($input: CreateAdmissionInput!) {
     status
     admissionDate
     monthlyFee
-    patient { patientId name age admittingDoctor }
+    patient { patientId name age gender admittingDoctor }
     bed { id label status }
   }
 }
@@ -66,6 +66,22 @@ def test_admin_can_create_admission(admin_client, vacant_bed):
     assert vacant_bed.status == BedStatus.OCCUPIED
     assert Patient.objects.count() == 1
     assert Admission.objects.count() == 1
+
+
+def test_gender_is_stored_when_provided(admin_client, vacant_bed):
+    result = admin_client.execute(
+        CREATE_ADMISSION, {"input": _input(vacant_bed, gender="FEMALE")}
+    )
+    assert result.get("errors") is None
+    assert result["data"]["createAdmission"]["patient"]["gender"] == "FEMALE"
+    assert Patient.objects.get().gender == "FEMALE"
+
+
+def test_gender_is_optional_and_defaults_blank(admin_client, vacant_bed):
+    result = admin_client.execute(CREATE_ADMISSION, {"input": _input(vacant_bed)})
+    assert result.get("errors") is None
+    assert result["data"]["createAdmission"]["patient"]["gender"] == ""
+    assert Patient.objects.get().gender == ""
 
 
 def test_duplicate_bed_is_rejected(admin_client, vacant_bed):
