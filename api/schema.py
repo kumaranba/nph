@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import strawberry
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from graphql import GraphQLError
 from strawberry.types import Info
@@ -16,13 +16,13 @@ from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee, Gender,
-    Invoice, InvoiceStatus, Patient, Payment, Room, SystemSetting, User,
-    UserRole, VitalReading, VitalsThreshold,
+    Invoice, InvoiceStatus, Patient, Payment, Room, SystemSetting, Tag,
+    TagCategory, User, UserRole, VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
     AdditionalChargeType, AdmissionType, BedType, FeeType, InvoiceType,
-    PatientType, PaymentType, RoomType, UserType, VitalReadingType,
+    PatientType, PaymentType, RoomType, TagType, UserType, VitalReadingType,
     VitalsThresholdType,
 )
 
@@ -55,6 +55,21 @@ class GenderEnum(Enum):
     MALE = 'MALE'
     FEMALE = 'FEMALE'
     OTHER = 'OTHER'
+
+
+@strawberry.enum
+class TagCategoryEnum(Enum):
+    """GraphQL enum for Tag.category (mirrors models.TagCategory)."""
+    BEHAVIOUR = 'BEHAVIOUR'
+    ILLNESS = 'ILLNESS'
+    OTHER = 'OTHER'
+
+
+@strawberry.enum
+class TagMatchEnum(Enum):
+    """How a multi-tag patient search combines the requested tags."""
+    ANY = 'ANY'   # patient carries at least one of the tags
+    ALL = 'ALL'   # patient carries every tag
 
 
 @strawberry.enum
@@ -176,6 +191,7 @@ class PatientSearchResult:
     room: Optional[str]
     bed: Optional[str]
     fee_status: str
+    tags: List[str]
 
 
 def _fee_status_for_patient(patient) -> str:
@@ -199,6 +215,32 @@ def _fee_status_for_patient(patient) -> str:
     if invoice.billing_period_end <= today + timedelta(days=DUE_SOON_WINDOW_DAYS):
         return 'DUE_SOON'
     return 'CURRENT'
+
+
+def _patient_search_result(patient) -> PatientSearchResult:
+    """Build a PatientSearchResult from a patient, resolving their current
+    (or most recent) admission and derived fee status."""
+    admission = (
+        patient.admissions.filter(status=AdmissionStatus.ACTIVE)
+        .select_related('bed__room')
+        .order_by('-admission_date')
+        .first()
+        or patient.admissions.select_related('bed__room')
+        .order_by('-admission_date')
+        .first()
+    )
+    return PatientSearchResult(
+        id=patient.id,
+        patient_id=patient.patient_id,
+        name=patient.name,
+        guardian_name=patient.guardian_name,
+        guardian_phone=patient.guardian_phone,
+        admission_date=admission.admission_date if admission else None,
+        room=admission.bed.room.name if admission and admission.bed else None,
+        bed=admission.bed.label if admission and admission.bed else None,
+        fee_status=_fee_status_for_patient(patient),
+        tags=list(patient.tags.order_by('name').values_list('label', flat=True)),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -492,32 +534,53 @@ class Query:
             .order_by('name')
         )
 
-        results: List[PatientSearchResult] = []
-        for patient in patients:
-            # Prefer the active admission; fall back to the most recent one.
-            admission = (
-                patient.admissions.filter(status=AdmissionStatus.ACTIVE)
-                .select_related('bed__room')
-                .order_by('-admission_date')
-                .first()
-                or patient.admissions.select_related('bed__room')
-                .order_by('-admission_date')
-                .first()
-            )
-            results.append(
-                PatientSearchResult(
-                    id=patient.id,
-                    patient_id=patient.patient_id,
-                    name=patient.name,
-                    guardian_name=patient.guardian_name,
-                    guardian_phone=patient.guardian_phone,
-                    admission_date=admission.admission_date if admission else None,
-                    room=admission.bed.room.name if admission and admission.bed else None,
-                    bed=admission.bed.label if admission and admission.bed else None,
-                    fee_status=_fee_status_for_patient(patient),
-                )
-            )
-        return results
+        return [_patient_search_result(patient) for patient in patients]
+
+    # Find patients by tag. `tags` are matched case-insensitively by label or
+    # canonical name; `match` is ANY (default) or ALL. Any authenticated role.
+    @strawberry.field
+    @login_required
+    def patients_by_tags(
+        self,
+        info: Info,
+        tags: List[str],
+        match: TagMatchEnum = TagMatchEnum.ANY,
+    ) -> List[PatientSearchResult]:
+        names = [t.strip().lower() for t in tags if t and t.strip()]
+        if not names:
+            return []
+
+        if match == TagMatchEnum.ALL:
+            patients = Patient.objects.all()
+            for name in names:
+                patients = patients.filter(tags__name=name)
+            patients = patients.distinct()
+        else:
+            patients = Patient.objects.filter(tags__name__in=names).distinct()
+
+        patients = patients.order_by('name')
+        return [_patient_search_result(patient) for patient in patients]
+
+    # Tag typeahead. Empty query returns the most-used tags; otherwise a
+    # case-insensitive substring match, ranked by usage then name. Optionally
+    # filtered by category. Any authenticated role.
+    @strawberry.field
+    @login_required
+    def tag_suggestions(
+        self,
+        info: Info,
+        query: Optional[str] = None,
+        category: Optional[TagCategoryEnum] = None,
+        limit: int = 10,
+    ) -> List[TagType]:
+        qs = Tag.objects.all()
+        if category is not None:
+            qs = qs.filter(category=category.value)
+        term = (query or '').strip()
+        if term:
+            qs = qs.filter(Q(name__icontains=term.lower()) | Q(label__icontains=term))
+        qs = qs.annotate(_use_count=Count('patients')).order_by('-_use_count', 'name')
+        return list(qs[: max(1, min(limit, 50))])
 
     @strawberry.field
     @login_required
@@ -917,6 +980,48 @@ class Mutation:
                 bed.save(update_fields=['status'])
 
         return admission
+
+    # Attach one or more tags to a patient, creating any that don't yet exist
+    # (matched case-insensitively). `category` is applied only to newly-created
+    # tags. ADMIN + NURSE. Returns the updated patient.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN, UserRole.NURSE)
+    def add_patient_tags(
+        self,
+        info: Info,
+        patient_id: strawberry.ID,
+        tags: List[str],
+        category: Optional[TagCategoryEnum] = None,
+    ) -> PatientType:
+        try:
+            patient = Patient.objects.get(pk=patient_id)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
+
+        cat = category.value if category else TagCategory.OTHER
+        with transaction.atomic():
+            for raw in tags:
+                tag, _ = Tag.get_or_create_normalized(raw, category=cat)
+                if tag is not None:
+                    patient.tags.add(tag)
+        return patient
+
+    # Remove a single tag from a patient (matched case-insensitively by label
+    # or canonical name). The Tag row itself is preserved. ADMIN + NURSE.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN, UserRole.NURSE)
+    def remove_patient_tag(
+        self, info: Info, patient_id: strawberry.ID, tag: str
+    ) -> PatientType:
+        try:
+            patient = Patient.objects.get(pk=patient_id)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
+        name = (tag or '').strip().lower()
+        existing = patient.tags.filter(name=name).first()
+        if existing is not None:
+            patient.tags.remove(existing)
+        return patient
 
     # Discharge a patient: mark the admission DISCHARGED and free the bed.
     # ADMIN and FINANCE may discharge (NURSE may not). Only FINANCE may attach

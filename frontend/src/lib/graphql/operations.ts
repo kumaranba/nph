@@ -31,6 +31,56 @@ export const SEARCH_PATIENTS = gql`
       room
       bed
       feeStatus
+      tags
+    }
+  }
+`;
+
+// Patients carrying the given tags. `match` is ANY (default) or ALL.
+export const PATIENTS_BY_TAGS = gql`
+  query PatientsByTags($tags: [String!]!, $match: TagMatchEnum) {
+    patientsByTags(tags: $tags, match: $match) {
+      id
+      patientId
+      name
+      guardianName
+      guardianPhone
+      admissionDate
+      room
+      bed
+      feeStatus
+      tags
+    }
+  }
+`;
+
+// Tag typeahead. Empty query returns the most-used tags.
+export const TAG_SUGGESTIONS = gql`
+  query TagSuggestions($query: String, $category: TagCategoryEnum) {
+    tagSuggestions(query: $query, category: $category) {
+      id
+      name
+      label
+      category
+      patientCount
+    }
+  }
+`;
+
+export const ADD_PATIENT_TAGS = gql`
+  mutation AddPatientTags($patientId: ID!, $tags: [String!]!, $category: TagCategoryEnum) {
+    addPatientTags(patientId: $patientId, tags: $tags, category: $category) {
+      id
+      tags { id name label category }
+    }
+  }
+`;
+
+export const REMOVE_PATIENT_TAG = gql`
+  mutation RemovePatientTag($patientId: ID!, $tag: String!) {
+    removePatientTag(patientId: $patientId, tag: $tag) {
+      id
+      tags { id name label category }
     }
   }
 `;
@@ -97,6 +147,7 @@ export const PATIENT = gql`
       guardianPhone
       admittingDoctor
       createdAt
+      tags { id name label category }
       admissions {
         id
         status
