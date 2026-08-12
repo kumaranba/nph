@@ -30,6 +30,8 @@ type FeeDueRow = {
   room: string | null;
   dueDate: string;
   amountDue: string;
+  openingBalance: string;
+  totalDueNow: string;
   daysUntilDue: number;
 };
 
@@ -182,7 +184,12 @@ export default function FeesDuePage() {
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <div className="font-semibold">{money(row.amountDue)}</div>
+                      <div className="font-semibold">{money(row.totalDueNow)}</div>
+                      {Number(row.openingBalance) > 0 ? (
+                        <div className="text-xs text-amber-700">
+                          incl. {money(row.openingBalance)} opening
+                        </div>
+                      ) : null}
                       <div className="text-xs text-muted-foreground">
                         {row.dueDate}
                       </div>
@@ -201,7 +208,9 @@ export default function FeesDuePage() {
                       <th className="py-2 pr-4 font-medium">Room</th>
                       <th className="py-2 pr-4 font-medium">Due date</th>
                       <th className="py-2 pr-4 font-medium">Days</th>
-                      <th className="py-2 text-right font-medium">Amount due</th>
+                      <th className="py-2 pr-4 text-right font-medium">Cycle</th>
+                      <th className="py-2 pr-4 text-right font-medium">Opening bal.</th>
+                      <th className="py-2 text-right font-medium">Total due</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -222,8 +231,20 @@ export default function FeesDuePage() {
                             ? "Today"
                             : `${row.daysUntilDue}d`}
                         </td>
-                        <td className="py-2 text-right">
+                        <td className="py-2 pr-4 text-right text-muted-foreground">
                           {money(row.amountDue)}
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          {Number(row.openingBalance) > 0 ? (
+                            <span className="text-amber-700">
+                              {money(row.openingBalance)}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-2 text-right font-semibold">
+                          {money(row.totalDueNow)}
                         </td>
                       </tr>
                     ))}

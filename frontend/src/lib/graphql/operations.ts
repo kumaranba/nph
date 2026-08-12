@@ -96,6 +96,8 @@ export const FEES_DUE_LIST = gql`
       room
       dueDate
       amountDue
+      openingBalance
+      totalDueNow
       daysUntilDue
     }
   }
@@ -154,6 +156,8 @@ export const PATIENT = gql`
         admissionDate
         monthlyFee
         creditBalance
+        openingBalance
+        openingBalanceDue
         nextFeeCycleDate
         activeFee {
           id

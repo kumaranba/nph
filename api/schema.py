@@ -170,7 +170,12 @@ class FeeDueItem:
     name: str
     room: Optional[str]
     due_date: date
-    amount_due: Decimal
+    amount_due: Decimal        # the upcoming cycle: monthly fee + period charges
+    # Unpaid carried-forward opening balance, shown alongside (not folded into)
+    # amount_due so the same money is never counted twice. total_due_now is the
+    # full ask: amount_due + opening_balance.
+    opening_balance: Decimal
+    total_due_now: Decimal
     days_until_due: int
 
 
@@ -426,6 +431,13 @@ class Query:
                 or Decimal('0')
             )
 
+            amount_due = admission.monthly_fee + charges
+            opening_inv = admission.invoices.filter(is_opening_balance=True).first()
+            opening_balance = (
+                BillingService.balance_due(opening_inv)
+                if opening_inv is not None else Decimal('0')
+            )
+
             items.append(
                 FeeDueItem(
                     id=admission.patient.id,
@@ -433,7 +445,9 @@ class Query:
                     name=admission.patient.name,
                     room=admission.bed.room.name if admission.bed else None,
                     due_date=due_date,
-                    amount_due=admission.monthly_fee + charges,
+                    amount_due=amount_due,
+                    opening_balance=opening_balance,
+                    total_due_now=amount_due + opening_balance,
                     days_until_due=days_until_due,
                 )
             )

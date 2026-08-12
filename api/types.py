@@ -84,6 +84,15 @@ class AdmissionType:
     discharge_notes: auto
     refund_amount: auto
     credit_balance: auto
+    opening_balance: auto
+
+    # Unpaid remainder of the carried-forward opening balance (the imported
+    # figure less any payments applied to it). 0 when fully paid or none.
+    @strawberry.field
+    def opening_balance_due(self) -> Decimal:
+        from .billing import BillingService
+        inv = self.invoices.filter(is_opening_balance=True).first()
+        return BillingService.balance_due(inv) if inv is not None else Decimal('0')
 
     # Outstanding-dues info, computed from the admission's invoices. Lets the
     # UI warn about unpaid balances before a discharge is confirmed.
@@ -141,6 +150,7 @@ class InvoiceType:
     refund_amount: auto
     total_due: auto
     status: auto
+    is_opening_balance: auto
 
     # The charge line items billed in this invoice's period.
     @strawberry.field

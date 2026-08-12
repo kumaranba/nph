@@ -17,15 +17,23 @@ By convention a ``MW`` prefix is a male ward and ``FW`` a female ward; a
 patient whose gender disagrees with the ward prefix is imported anyway with a
 warning.
 
+The ``Fees Status`` column holds the patient's current outstanding (the net
+amount owed today; ``NIL``/blank means nothing owed). It is imported as the
+admission's opening balance and seeded as a carried-forward invoice. No
+current-cycle invoice is generated at import — the opening balance already
+covers everything owed through the capture date (``--as-of``, default today),
+so monthly billing resumes only at the next cycle after it.
+
 Missing fields (age, diagnosis, admitting_doctor) are set to placeholder
 values that staff can update via the application later.
 
 Usage:
     python manage.py import_register patient_register.csv
     python manage.py import_register patient_register.csv --dry-run
+    python manage.py import_register patient_register.csv --as-of 2026-08-12
 """
 import csv
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand, CommandError
@@ -87,10 +95,27 @@ class Command(BaseCommand):
             action="store_true",
             help="Validate and report without creating any records.",
         )
+        parser.add_argument(
+            "--as-of",
+            default=None,
+            help=(
+                "Capture date for opening balances (YYYY-MM-DD). Charges through "
+                "this date are covered by the opening balance; monthly billing "
+                "resumes at the next cycle after it. Defaults to today."
+            ),
+        )
 
     def handle(self, *args, **options):
         path = options["csv_path"]
         dry_run = options["dry_run"]
+        raw_as_of = options.get("as_of")
+        if raw_as_of:
+            try:
+                self.as_of = datetime.strptime(raw_as_of, "%Y-%m-%d").date()
+            except ValueError:
+                raise CommandError("--as-of must be YYYY-MM-DD.")
+        else:
+            self.as_of = date.today()
 
         try:
             fh = open(path, newline="", encoding="utf-8-sig")
@@ -177,6 +202,18 @@ class Command(BaseCommand):
             except InvalidOperation:
                 errors.append(f"Fees '{raw_fee}' is not a valid number")
 
+        # Opening balance = current outstanding from the "Fees Status" column
+        # (the net amount owed today). "NIL"/blank means nothing owed.
+        opening_balance = Decimal("0")
+        raw_status = v("Fees Status")
+        if raw_status and raw_status.upper() != "NIL":
+            try:
+                opening_balance = Decimal(raw_status.replace(",", ""))
+                if opening_balance < 0:
+                    errors.append("Fees Status must be non-negative")
+            except InvalidOperation:
+                errors.append(f"Fees Status '{raw_status}' is not a valid number")
+
         # Ward (optional). Gender-vs-ward mismatch is a warning, not an error.
         ward = v("Ward").upper()
         if ward and gender:
@@ -214,13 +251,25 @@ class Command(BaseCommand):
                     admission_date=admission_date,
                     monthly_fee=monthly_fee,
                     status=AdmissionStatus.ACTIVE,
+                    opening_balance=opening_balance,
+                    # Charges through today are captured in the opening balance;
+                    # monthly billing resumes at the next cycle after this date.
+                    opening_balance_as_of=self.as_of,
                 )
                 if bed is not None:
                     bed.status = BedStatus.OCCUPIED
                     bed.save(update_fields=["status"])
-                BillingService.generate_invoice_for_admission(
-                    admission.id, as_of=admission_date
-                )
+                # Every ACTIVE admission must have exactly one active Fee (see
+                # CLAUDE.md), even when nothing is owed and no invoice is seeded.
+                BillingService._ensure_active_fee(admission)
+                # Seed the carried-forward balance as an opening-balance invoice.
+                # We do NOT generate a current-cycle invoice: the opening balance
+                # already reflects everything owed through today, so billing the
+                # in-progress period again would double-count it.
+                if opening_balance > 0:
+                    BillingService.create_opening_balance_invoice(
+                        admission.id, opening_balance, as_of=self.as_of
+                    )
         except Exception as exc:
             return [f"unexpected error: {exc}"], warnings
 
