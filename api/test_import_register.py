@@ -4,12 +4,14 @@ Covers the Gender column, the Ward column with auto-created wards and
 auto-generated beds (capped at 20/ward), and the warnings the importer emits
 for blank/over-capacity wards, gender/ward mismatches, and bad gender values.
 """
+from datetime import date
 from decimal import Decimal
 from io import StringIO
 
 import pytest
 from django.core.management import call_command
 
+from api.billing import BillingService
 from api.models import (
     Admission,
     AdmissionStatus,
@@ -24,10 +26,19 @@ from api.models import (
 # Register export header (subset of columns the importer reads).
 HEADER = "S.No,Name,Gender,D.O.A,Fees,Ward,Contact"
 
+# Header including the "Fees Status" (opening balance) column.
+HEADER_OB = "S.No,Name,Gender,D.O.A,Fees,Fees Status,Ward,Contact"
+
 
 def _write_csv(tmp_path, *rows):
     path = tmp_path / "register.csv"
     path.write_text(HEADER + "\n" + "\n".join(rows) + "\n")
+    return str(path)
+
+
+def _write_csv_ob(tmp_path, *rows):
+    path = tmp_path / "register_ob.csv"
+    path.write_text(HEADER_OB + "\n" + "\n".join(rows) + "\n")
     return str(path)
 
 
@@ -56,7 +67,9 @@ def test_valid_row_creates_patient_admission_invoice_and_bed(tmp_path, db):
     assert admission.bed.room == room
     assert admission.bed.label == "B1"
     assert admission.bed.status == BedStatus.OCCUPIED
-    assert Invoice.objects.filter(admission=admission).count() == 1
+    # No "Fees Status" column here → zero opening balance → no invoice seeded.
+    assert admission.opening_balance == Decimal("0")
+    assert Invoice.objects.filter(admission=admission).count() == 0
 
 
 def test_register_slash_date_with_two_digit_year(tmp_path, db):
@@ -173,3 +186,87 @@ def test_dry_run_creates_nothing(tmp_path, db):
     assert Patient.objects.count() == 0
     assert Admission.objects.count() == 0
     assert Room.objects.count() == 0
+
+
+# --- Opening balance (Fees Status column) ----------------------------------
+
+def test_opening_balance_seeds_carried_invoice_only(tmp_path, db):
+    # Manikandan-style: monthly 9500, current outstanding 13500, admitted long
+    # ago. Import captures the outstanding as an opening balance and seeds ONE
+    # carried-forward invoice — no current-cycle invoice (would double-count).
+    path = _write_csv_ob(
+        tmp_path,
+        "1,Manikandan,M,03/03/25,9500,13500,MW1,",
+    )
+    _run(path, as_of="2026-08-12")
+
+    admission = Admission.objects.get(patient__name="Manikandan")
+    assert admission.opening_balance == Decimal("13500")
+    assert admission.opening_balance_as_of.isoformat() == "2026-08-12"
+
+    invoices = Invoice.objects.filter(admission=admission)
+    assert invoices.count() == 1
+    opening = invoices.get()
+    assert opening.is_opening_balance is True
+    assert opening.total_due == Decimal("13500")
+    assert opening.base_fee == Decimal("0")
+    # Sentinel period is the day before admission, so it sorts oldest.
+    assert opening.billing_period_start.isoformat() == "2025-03-02"
+
+
+def test_nil_status_seeds_no_opening_balance(tmp_path, db):
+    path = _write_csv_ob(
+        tmp_path,
+        "1,PaidUp,M,03/03/25,9500,NIL,MW1,",
+    )
+    _run(path, as_of="2026-08-12")
+    admission = Admission.objects.get(patient__name="PaidUp")
+    assert admission.opening_balance == Decimal("0")
+    assert Invoice.objects.filter(admission=admission).count() == 0
+    # Invariant: an ACTIVE admission always has exactly one active Fee, even a
+    # paid-up (NIL) patient with no invoice.
+    assert admission.fees.filter(is_active=True).count() == 1
+
+
+def test_forward_billing_resumes_next_cycle_without_double_count(tmp_path, db):
+    # After import, the current (covered) monthly period must NOT be billed
+    # again; the next cycle bills normally and stacks on the opening balance.
+    path = _write_csv_ob(
+        tmp_path,
+        "1,Manikandan,M,03/03/25,9500,13500,MW1,",
+    )
+    _run(path, as_of="2026-08-12")
+    admission = Admission.objects.get(patient__name="Manikandan")
+
+    # Current period (03 Aug–02 Sep) is covered by the opening balance.
+    BillingService.generate_all_due_invoices(as_of=date(2026, 8, 12))
+    assert Invoice.objects.filter(admission=admission).count() == 1  # still just opening
+
+    # Next cycle on 03 Sep generates a normal 9500 invoice → outstanding 23000.
+    BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 9, 3))
+    outstanding = sum(
+        BillingService.balance_due(inv)
+        for inv in Invoice.objects.filter(admission=admission)
+    )
+    assert outstanding == Decimal("23000")
+
+
+def test_payment_clears_opening_balance_first(tmp_path, db):
+    from api.models import User, UserRole
+
+    user = User.objects.create_user(
+        email="fin@nph.test", password="secret123", role=UserRole.FINANCE
+    )
+    path = _write_csv_ob(
+        tmp_path,
+        "1,Manikandan,M,03/03/25,9500,13500,MW1,",
+    )
+    _run(path, as_of="2026-08-12")
+    admission = Admission.objects.get(patient__name="Manikandan")
+
+    # A 4000 payment lands on the oldest debt: the opening balance.
+    BillingService.record_payment_for_admission(
+        admission, Decimal("4000"), date(2026, 8, 12), user
+    )
+    opening = Invoice.objects.get(admission=admission, is_opening_balance=True)
+    assert BillingService.balance_due(opening) == Decimal("9500")

@@ -207,6 +207,16 @@ class Admission(models.Model):
     refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     # Unapplied advance credit; drawn down as monthly invoices come due.
     credit_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Balance carried forward from before the system (e.g. imported from the
+    # paper register). Captured once as the net amount owed on
+    # ``opening_balance_as_of``; represented as an is_opening_balance Invoice so
+    # it flows through outstanding / payments / discharge like any other debt.
+    opening_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # The date the opening balance was captured. Monthly billing resumes at the
+    # first cycle date AFTER this date, so the already-covered current period is
+    # not billed again (no double counting). Null for normal (non-imported)
+    # admissions, which bill from admission_date as usual.
+    opening_balance_as_of = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return f'Admission #{self.pk} — {self.patient.name} ({self.status})'
@@ -276,6 +286,11 @@ class Invoice(models.Model):
     status = models.CharField(
         max_length=10, choices=InvoiceStatus.choices, default=InvoiceStatus.UNPAID
     )
+    # True for the single carried-forward "opening balance" invoice seeded at
+    # import. It has a sentinel period (the day before admission) so it sorts
+    # oldest and never collides with a real monthly period; base_fee is 0 and
+    # total_due is the imported outstanding.
+    is_opening_balance = models.BooleanField(default=False)
 
     class Meta:
         # One invoice per billing period per admission

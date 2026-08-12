@@ -27,9 +27,11 @@ type Admission = {
   id: string;
   status: string;
   admissionDate: string;
+  openingBalance: string;
+  openingBalanceDue: string;
   hasOutstandingDues: boolean;
   outstandingInvoiceCount: number;
-  bed: { id: string; label: string; room: { id: string; name: string } };
+  bed: { id: string; label: string; room: { id: string; name: string } } | null;
   additionalCharges: Charge[];
 };
 
@@ -127,10 +129,20 @@ export default function PatientProfilePage() {
                   label="Status"
                   value={
                     activeAdmission
-                      ? `Admitted · ${activeAdmission.bed.room.name} ${activeAdmission.bed.label}`
+                      ? activeAdmission.bed
+                        ? `Admitted · ${activeAdmission.bed.room.name} ${activeAdmission.bed.label}`
+                        : "Admitted · no bed assigned"
                       : "Not currently admitted"
                   }
                 />
+                {activeAdmission && Number(activeAdmission.openingBalanceDue) > 0 ? (
+                  <Row
+                    label="Opening balance due"
+                    value={`₹${Number(
+                      activeAdmission.openingBalanceDue
+                    ).toLocaleString("en-IN")}`}
+                  />
+                ) : null}
               </dl>
 
               <PatientTagsPanel

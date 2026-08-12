@@ -27,3 +27,32 @@ invariants MUST hold and are covered by tests:
 
 `FeeService` (`api/fees.py`) enforces these; `python manage.py
 verify_fee_migration` checks 1–3 against the live database.
+
+## Opening balance (imported carry-forward)
+
+Patients migrated from the paper register (`import_register`) arrive with a
+current outstanding (the `Fees Status` column). It is stored on
+`Admission.opening_balance` and seeded as a single **opening-balance invoice**
+(`Invoice.is_opening_balance=True`) so it flows through outstanding totals,
+payment allocation (oldest-first, so it's paid down before new months),
+discharge warnings, and the fees-due list like any other debt.
+
+Rules that MUST hold (covered by tests):
+
+1. **No double counting at import.** The opening balance is the net owed as of
+   `Admission.opening_balance_as_of`. `import_register` does **not** generate a
+   current-cycle invoice — the opening balance already covers everything through
+   that date.
+2. **Billing resumes at the next cycle.** `generate_invoice_for_admission`
+   skips any monthly period whose start is `<= opening_balance_as_of`, so the
+   already-covered in-progress period is never billed twice. Monthly billing
+   (same day-of-month) continues normally from the first cycle after that date.
+3. **The opening-balance invoice is distinguished, not a monthly bill.** It has
+   `base_fee=0`, `total_due=opening_balance`, and a sentinel period (the day
+   before admission) so it sorts oldest and never collides with a real period.
+4. **`opening_balance_as_of` is null for non-imported admissions**, which bill
+   normally from `admission_date`.
+
+The fees-due list keeps the upcoming cycle (`amountDue`) and the carried
+`openingBalance` as **separate** fields (`totalDueNow = amountDue +
+openingBalance`) so the same money is never summed into two places.

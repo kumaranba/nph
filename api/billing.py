@@ -99,6 +99,17 @@ class BillingService:
 
         start, end = cls._period_for(admission.admission_date, as_of)
 
+        # For imported admissions, every period up to and including the one that
+        # was in progress when the opening balance was captured is already
+        # covered by that opening balance. Billing resumes at the first period
+        # starting AFTER the capture date, so we never bill a covered period
+        # twice.
+        if (
+            admission.opening_balance_as_of is not None
+            and start <= admission.opening_balance_as_of
+        ):
+            return None
+
         existing = Invoice.objects.filter(
             admission=admission,
             billing_period_start=start,
@@ -129,6 +140,46 @@ class BillingService:
             status=InvoiceStatus.UNPAID,
         )
         # Draw down any advance credit against the fresh invoice.
+        cls.apply_credit(admission)
+        invoice.refresh_from_db()
+        return invoice
+
+    @classmethod
+    @transaction.atomic
+    def create_opening_balance_invoice(cls, admission_id, amount, as_of: date = None):
+        """Seed a carried-forward opening balance for an imported admission.
+
+        Creates a single ``is_opening_balance`` invoice for ``amount`` with a
+        sentinel period (the day before admission) so it sorts oldest and never
+        collides with a real monthly period. Idempotent: returns the existing
+        opening-balance invoice if one is already present. ``amount`` <= 0 is a
+        no-op.
+        """
+        from .models import Fee  # noqa: F401  (kept parallel to _ensure_active_fee)
+
+        amount = Decimal(amount)
+        admission = Admission.objects.select_for_update().get(pk=admission_id)
+
+        existing = admission.invoices.filter(is_opening_balance=True).first()
+        if existing is not None:
+            return existing
+        if amount <= 0:
+            return None
+
+        fee = cls._ensure_active_fee(admission)
+        sentinel = admission.admission_date - timedelta(days=1)
+        invoice = Invoice.objects.create(
+            admission=admission,
+            fee=fee,
+            billing_period_start=sentinel,
+            billing_period_end=sentinel,
+            base_fee=Decimal("0"),
+            total_due=amount,
+            status=InvoiceStatus.UNPAID,
+            is_opening_balance=True,
+        )
+        # Draw down any advance credit against it (none at import time, but keep
+        # the invariant that credit is applied whenever a new invoice appears).
         cls.apply_credit(admission)
         invoice.refresh_from_db()
         return invoice
