@@ -38,6 +38,19 @@ class BedType:
     status: auto
 
 
+@strawberry_django.type(models.Tag)
+class TagType:
+    id: auto
+    name: auto
+    label: auto
+    category: auto
+
+    # Number of patients carrying this tag (drives suggestion ranking).
+    @strawberry.field
+    def patient_count(self) -> int:
+        return self.patients.count()
+
+
 @strawberry_django.type(models.Patient)
 class PatientType:
     id: auto
@@ -51,6 +64,11 @@ class PatientType:
     admitting_doctor: auto
     created_at: auto
     admissions: list['AdmissionType']
+
+    # Tags applied to this patient, alphabetical.
+    @strawberry.field
+    def tags(self) -> list['TagType']:
+        return self.tags.order_by('name')
 
 
 @strawberry_django.type(models.Admission)

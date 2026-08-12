@@ -9,6 +9,8 @@ import {
   type Charge,
 } from "@/components/additional-charges-panel";
 import { DischargeModal } from "@/components/discharge-modal";
+import { PatientTagsPanel } from "@/components/patient-tags-panel";
+import { type Tag } from "@/components/tag-input";
 import { LinesSkeleton, QueryError } from "@/components/query-states";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +44,7 @@ type PatientResult = {
     guardianPhone: string;
     admittingDoctor: string;
     createdAt: string;
+    tags: Tag[];
     admissions: Admission[];
   } | null;
 };
@@ -88,6 +91,8 @@ export default function PatientProfilePage() {
   );
   // ADMIN and FINANCE may discharge; NURSE may not.
   const canDischarge = role === "ADMIN" || role === "FINANCE";
+  // ADMIN and NURSE (clinical staff) may edit tags; FINANCE is view-only.
+  const canEditTags = role === "ADMIN" || role === "NURSE";
   // Show the charge log for the active admission, else the most recent one.
   const chargesAdmission =
     activeAdmission ??
@@ -127,6 +132,12 @@ export default function PatientProfilePage() {
                   }
                 />
               </dl>
+
+              <PatientTagsPanel
+                patientId={patient.id}
+                tags={patient.tags}
+                canEdit={canEditTags}
+              />
 
               <Button
                 variant="outline"
