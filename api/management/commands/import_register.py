@@ -4,7 +4,7 @@ Expected columns (from the handwritten register export):
     S.No, Name, Gender, D.O.A, Fees, Ward, Page#, Drug Amount, Fees Status,
     Contact, Place, Comments
 
-Admission date format: DD-MM-YYYY
+Admission date: day-first, e.g. 30/08/25, 30/08/2025, or 30-08-2025.
 
 Gender is read from the ``Gender`` column (M/F/O or the full word) and stored
 on the Patient. It is the source of truth for the patient's gender.
@@ -45,6 +45,17 @@ from api.models import (
 PLACEHOLDER_AGE = 0
 PLACEHOLDER_DIAGNOSIS = "Unspecified"
 PLACEHOLDER_DOCTOR = "Unspecified"
+
+# Accepted D.O.A formats, tried in order. The register export is day-first with
+# a 2-digit year (30/08/25); the others are tolerated for hand-edited files. A
+# 2-digit year maps per Python's %y (00-68 → 2000s, 69-99 → 1900s).
+DATE_FORMATS = (
+    "%d/%m/%y",   # 30/08/25
+    "%d/%m/%Y",   # 30/08/2025
+    "%d-%m-%y",   # 30-08-25
+    "%d-%m-%Y",   # 30-08-2025
+    "%Y-%m-%d",   # 2025-08-30
+)
 
 # Max auto-generated beds per ward.
 WARD_BED_CAP = 20
@@ -142,14 +153,17 @@ class Command(BaseCommand):
         if not raw_date:
             errors.append("D.O.A is required")
         else:
-            for fmt in ("%d-%m-%Y", "%Y-%m-%d"):
+            for fmt in DATE_FORMATS:
                 try:
                     admission_date = datetime.strptime(raw_date, fmt).date()
                     break
                 except ValueError:
                     continue
             if admission_date is None:
-                errors.append(f"D.O.A '{raw_date}' must be DD-MM-YYYY")
+                errors.append(
+                    f"D.O.A '{raw_date}' must be a day-first date "
+                    f"(e.g. 30/08/25, 30-08-2025)"
+                )
 
         monthly_fee = None
         raw_fee = v("Fees")
