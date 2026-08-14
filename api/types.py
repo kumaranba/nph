@@ -62,6 +62,7 @@ class PatientType:
     guardian_name: auto
     guardian_phone: auto
     admitting_doctor: auto
+    place: auto
     created_at: auto
     admissions: list['AdmissionType']
 

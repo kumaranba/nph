@@ -103,6 +103,24 @@ export const FEES_DUE_LIST = gql`
   }
 `;
 
+// Active patients who currently owe money (past dues included), highest first.
+export const PENDING_DUES_LIST = gql`
+  query PendingDuesList {
+    pendingDuesList {
+      id
+      patientId
+      name
+      gender
+      room
+      admissionDate
+      currentFees
+      totalPendingDues
+      contact
+      place
+    }
+  }
+`;
+
 // Only vacant beds — used to populate the admission form's bed picker.
 export const VACANT_BEDS = gql`
   query VacantBeds {

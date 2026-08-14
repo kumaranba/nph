@@ -48,6 +48,14 @@ def _run(path, **kwargs):
     return out.getvalue()
 
 
+def test_place_column_is_imported(tmp_path, db):
+    header = "S.No,Name,Gender,D.O.A,Fees,Ward,Contact,Place"
+    path = tmp_path / "with_place.csv"
+    path.write_text(header + "\n1,Ravi,M,15-01-2026,9500,MW1,999,Trichy\n")
+    _run(str(path))
+    assert Patient.objects.get(name="Ravi").place == "Trichy"
+
+
 def test_valid_row_creates_patient_admission_invoice_and_bed(tmp_path, db):
     path = _write_csv(
         tmp_path,

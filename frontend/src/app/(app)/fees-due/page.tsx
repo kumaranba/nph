@@ -21,7 +21,26 @@ import {
   TableSkeleton,
 } from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
-import { FEES_DUE_LIST, ME } from "@/lib/graphql/operations";
+import { FEES_DUE_LIST, ME, PENDING_DUES_LIST } from "@/lib/graphql/operations";
+
+// Pending-dues report PDF lives on the same origin as the GraphQL endpoint.
+const PDF_URL = (
+  process.env.NEXT_PUBLIC_GRAPHQL_ENDPOINT ?? "http://localhost:8000/graphql/"
+).replace(/\/graphql\/?$/, "/reports/fees-due.pdf");
+
+type PendingDueRow = {
+  id: string;
+  patientId: string;
+  name: string;
+  gender: string;
+  room: string | null;
+  admissionDate: string;
+  currentFees: string;
+  totalPendingDues: string;
+  contact: string;
+  place: string;
+};
+type PendingDuesResult = { pendingDuesList: PendingDueRow[] };
 
 type FeeDueRow = {
   id: string;
@@ -81,6 +100,41 @@ export default function FeesDuePage() {
     );
     return list;
   }, [data, sortAsc]);
+
+  // Pending dues (past + present), highest outstanding first.
+  const {
+    data: pendingData,
+    loading: pendingLoading,
+    error: pendingError,
+    refetch: refetchPending,
+  } = useQuery<PendingDuesResult>(PENDING_DUES_LIST, {
+    skip: !hasToken || !allowed,
+  });
+  const pendingRows = pendingData?.pendingDuesList ?? [];
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadPdf() {
+    const token = getAccessToken();
+    if (!token) return;
+    setDownloading(true);
+    try {
+      const resp = await fetch(PDF_URL, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error(`Download failed (${resp.status})`);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "fees-due.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Surfaced via the disabled state resetting; keep it simple.
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (!hasToken || meLoading) {
     return (
@@ -246,6 +300,117 @@ export default function FeesDuePage() {
                         <td className="py-2 text-right font-semibold">
                           {money(row.totalDueNow)}
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Pending dues (past + present) — highest outstanding first, with PDF. */}
+      <Card className="mt-6">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Pending dues</CardTitle>
+              <CardDescription>
+                Active patients who owe money now (includes past dues), highest
+                first
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              onClick={downloadPdf}
+              disabled={downloading || pendingRows.length === 0}
+            >
+              {downloading ? "Preparing…" : "Download PDF"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {pendingLoading ? (
+            <TableSkeleton rows={4} cols={5} />
+          ) : pendingError ? (
+            <QueryError
+              message={pendingError.message}
+              onRetry={() => refetchPending()}
+            />
+          ) : pendingRows.length === 0 ? (
+            <EmptyState
+              title="No pending dues"
+              description="No active patient currently has an outstanding balance."
+            />
+          ) : (
+            <>
+              {/* Mobile: stacked cards */}
+              <div className="space-y-2.5 sm:hidden">
+                {pendingRows.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    onClick={() => router.push(`/patients/${row.id}`)}
+                    className="flex w-full items-start justify-between gap-3 rounded-lg border bg-card p-3 text-left active:bg-muted/50"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium">{row.name}</div>
+                      <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                        <span>{row.place || "—"}</span>
+                        <span>{row.contact || "—"}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="font-semibold text-red-700">
+                        {money(row.totalPendingDues)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        cycle {money(row.currentFees)}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Tablet/desktop: table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">#</th>
+                      <th className="py-2 pr-4 font-medium">Patient</th>
+                      <th className="py-2 pr-4 font-medium">DOA</th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        Current fees
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        Total pending
+                      </th>
+                      <th className="py-2 pr-4 font-medium">Contact</th>
+                      <th className="py-2 font-medium">Place</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingRows.map((row, i) => (
+                      <tr
+                        key={row.id}
+                        className="cursor-pointer border-b last:border-0 hover:bg-muted/50"
+                        onClick={() => router.push(`/patients/${row.id}`)}
+                      >
+                        <td className="py-2 pr-4 text-muted-foreground">
+                          {i + 1}
+                        </td>
+                        <td className="py-2 pr-4">{row.name}</td>
+                        <td className="py-2 pr-4">{row.admissionDate}</td>
+                        <td className="py-2 pr-4 text-right">
+                          {money(row.currentFees)}
+                        </td>
+                        <td className="py-2 pr-4 text-right font-semibold text-red-700">
+                          {money(row.totalPendingDues)}
+                        </td>
+                        <td className="py-2 pr-4">{row.contact || "—"}</td>
+                        <td className="py-2">{row.place || "—"}</td>
                       </tr>
                     ))}
                   </tbody>

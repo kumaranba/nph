@@ -239,6 +239,7 @@ class Command(BaseCommand):
                     guardian_name="",
                     guardian_phone=v("Contact"),
                     admitting_doctor=PLACEHOLDER_DOCTOR,
+                    place=v("Place"),
                 )
                 bed = None
                 if ward:
