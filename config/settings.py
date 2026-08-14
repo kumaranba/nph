@@ -150,3 +150,23 @@ JWT_REFRESH_TOKEN_LIFETIME = timedelta(days=int(os.environ.get('JWT_REFRESH_DAYS
 # Default look-ahead window (in days) for the "fees due" list when a caller
 # does not pass an explicit withinDays.
 FEE_DUE_WARNING_DAYS = int(os.environ.get('FEE_DUE_WARNING_DAYS', '7'))
+
+# ---------------------------------------------------------------------------
+# Celery (async tasks + scheduled billing)
+# ---------------------------------------------------------------------------
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
+CELERY_TASK_TRACK_STARTED = True
+# Beat schedules in this timezone, so "9:00" is 9:00 AM local (Django stays UTC).
+CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'Asia/Kolkata')
+CELERY_ENABLE_UTC = True
+
+# Daily billing run: generate any invoices that have become due.
+CELERY_BEAT_SCHEDULE = {
+    'generate-invoices-daily': {
+        'task': 'api.tasks.generate_due_invoices',
+        'schedule': crontab(hour=9, minute=0),
+    },
+}
