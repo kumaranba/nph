@@ -56,3 +56,17 @@ Rules that MUST hold (covered by tests):
 The fees-due list keeps the upcoming cycle (`amountDue`) and the carried
 `openingBalance` as **separate** fields (`totalDueNow = amountDue +
 openingBalance`) so the same money is never summed into two places.
+
+## Scheduled billing (Celery)
+
+Monthly invoices are created by `BillingService.generate_all_due_invoices`,
+which is **idempotent** (skips periods already invoiced). It is driven two ways:
+
+- **Celery Beat** runs the `api.tasks.generate_due_invoices` task **daily at
+  09:00 Asia/Kolkata** (`CELERY_BEAT_SCHEDULE` in settings). This is the
+  production mechanism — a started cycle's invoice appears by 09:00, so pending
+  dues / fees-due stay current without any generate-on-read side effects.
+- `python manage.py generate_invoices` for manual runs / backfill.
+
+Local dev needs Redis plus two processes: `celery -A config worker` and
+`celery -A config beat` (exactly one beat instance).
