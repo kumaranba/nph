@@ -163,6 +163,23 @@ def _today() -> date:
 
 
 @strawberry.type
+class PendingDueItem:
+    """An active patient who currently owes money, for the pending-dues list
+    and the fees-due PDF. Includes past dues (overdue months + carried opening
+    balance), unlike FeeDueItem which is forward-looking."""
+    id: strawberry.ID          # patient primary key (for navigation)
+    patient_id: str            # NPH-YYYY-NNNN code
+    name: str
+    gender: str
+    room: Optional[str]
+    admission_date: date       # DOA
+    current_fees: Decimal      # current cycle's charge (monthly fee + charges)
+    total_pending_dues: Decimal
+    contact: str
+    place: str
+
+
+@strawberry.type
 class FeeDueItem:
     """A patient with an upcoming billing cycle date, for the fees-due list."""
     id: strawberry.ID          # patient primary key (for navigation)
@@ -246,6 +263,42 @@ def _patient_search_result(patient) -> PatientSearchResult:
         fee_status=_fee_status_for_patient(patient),
         tags=list(patient.tags.order_by('name').values_list('label', flat=True)),
     )
+
+
+def build_pending_dues(as_of: date = None) -> List['PendingDueItem']:
+    """Active admissions that currently owe money, highest dues first.
+
+    Shared by the ``pendingDuesList`` query and the fees-due PDF. Includes past
+    dues (overdue months + carried opening balance), not just the upcoming
+    cycle. Patients with zero outstanding are excluded.
+    """
+    as_of = as_of or _today()
+    items: List[PendingDueItem] = []
+    active = (
+        Admission.objects.filter(status=AdmissionStatus.ACTIVE)
+        .select_related('patient', 'bed__room')
+    )
+    for admission in active:
+        pending = BillingService.total_pending_dues(admission)
+        if pending <= 0:
+            continue
+        patient = admission.patient
+        items.append(
+            PendingDueItem(
+                id=patient.id,
+                patient_id=patient.patient_id,
+                name=patient.name,
+                gender=patient.gender or '',
+                room=admission.bed.room.name if admission.bed else None,
+                admission_date=admission.admission_date,
+                current_fees=BillingService.current_cycle_charge(admission, as_of),
+                total_pending_dues=pending,
+                contact=patient.guardian_phone or '',
+                place=patient.place or '',
+            )
+        )
+    items.sort(key=lambda i: i.total_pending_dues, reverse=True)
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +507,14 @@ class Query:
 
         items.sort(key=lambda item: item.due_date)
         return items
+
+    # Active patients who currently owe money (past dues included), highest
+    # outstanding first. Backs the pending-dues view and the fees-due PDF.
+    # ADMIN + FINANCE only.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def pending_dues_list(self, info: Info) -> List[PendingDueItem]:
+        return build_pending_dues()
 
     # --- ADMIN + NURSE (clinical data) -------------------------------------
     @strawberry.field

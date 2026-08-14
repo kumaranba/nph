@@ -233,6 +233,35 @@ class BillingService:
             - cls.amount_paid(invoice)
         )
 
+    # ------------------------------------------------------ pending-dues report
+    @classmethod
+    def total_pending_dues(cls, admission) -> Decimal:
+        """The admission's full current outstanding: the sum of the balance due
+        across every unpaid/partial invoice (opening balance, overdue months,
+        and the current cycle alike)."""
+        total = Decimal("0")
+        for inv in admission.invoices.filter(
+            status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+        ).prefetch_related("payments"):
+            total += cls.balance_due(inv)
+        return total
+
+    @classmethod
+    def current_cycle_charge(cls, admission, as_of: date = None) -> Decimal:
+        """The charge for the billing cycle in progress on ``as_of``: the
+        monthly fee plus any additional charges dated within that period."""
+        as_of = as_of or date.today()
+        start, end = cls._period_for(admission.admission_date, as_of)
+        charges = (
+            AdditionalCharge.objects.filter(
+                admission=admission,
+                charge_date__gte=start,
+                charge_date__lte=end,
+            ).aggregate(total=Sum("amount"))["total"]
+            or Decimal("0")
+        )
+        return admission.monthly_fee + charges
+
     # -------------------------------------------------------- credit + payments
     @classmethod
     def apply_credit(cls, admission):
