@@ -141,7 +141,6 @@ class CreateAdmissionInput:
     """
     # Patient details
     name: str
-    age: int
     diagnosis: str
     admitting_doctor: str
     # Admission details
@@ -149,6 +148,7 @@ class CreateAdmissionInput:
     admission_date: date
     monthly_fee: Decimal
     # Optional patient details
+    age: Optional[int] = None
     guardian_name: Optional[str] = ""
     guardian_phone: Optional[str] = ""
     gender: Optional[GenderEnum] = None
@@ -1040,7 +1040,7 @@ class Mutation:
     def create_admission(self, info: Info, input: CreateAdmissionInput) -> AdmissionType:
         if not input.name.strip():
             raise GraphQLError('Patient name is required.')
-        if input.age < 0:
+        if input.age is not None and input.age < 0:
             raise GraphQLError('Age must be a positive number.')
         if input.monthly_fee < 0:
             raise GraphQLError('Monthly fee cannot be negative.')
@@ -1083,6 +1083,11 @@ class Mutation:
             if bed is not None:
                 bed.status = BedStatus.OCCUPIED
                 bed.save(update_fields=['status'])
+
+            # Bill every period already due (admission may be back-dated), so an
+            # unpaid new admission surfaces immediately in fees-due / pending
+            # dues rather than only after the next daily billing run.
+            BillingService.generate_all_due_for_admission(admission.id)
 
         return admission
 

@@ -145,7 +145,7 @@ class Patient(models.Model):
     """
     patient_id = models.CharField(max_length=20, unique=True, editable=False)
     name = models.CharField(max_length=255)
-    age = models.PositiveIntegerField()
+    age = models.PositiveIntegerField(null=True, blank=True)
     gender = models.CharField(max_length=10, choices=Gender.choices, blank=True)
     diagnosis = models.TextField()
     guardian_name = models.CharField(max_length=255, blank=True)

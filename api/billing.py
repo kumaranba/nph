@@ -185,6 +185,39 @@ class BillingService:
         return invoice
 
     @classmethod
+    def generate_all_due_for_admission(cls, admission_id, as_of: date = None):
+        """Generate invoices for **every** billing period of one admission from
+        its admission date through ``as_of`` (default today), not just the
+        current one. Used when an admission is created (possibly back-dated) so
+        all periods already due are billed immediately. Idempotent.
+
+        Returns the list of invoices created.
+        """
+        as_of = as_of or date.today()
+        admission = Admission.objects.get(pk=admission_id)
+        if as_of < admission.admission_date:
+            return []
+
+        created = []
+        # Walk each cycle start from the admission date up to as_of.
+        cursor = admission.admission_date
+        while cursor <= as_of:
+            start, end = cls._period_for(admission.admission_date, cursor)
+            already = Invoice.objects.filter(
+                admission=admission,
+                billing_period_start=start,
+                billing_period_end=end,
+            ).exists()
+            if not already:
+                invoice = cls.generate_invoice_for_admission(admission_id, as_of=cursor)
+                if invoice is not None:
+                    created.append(invoice)
+            cursor = cls.next_billing_cycle_date(
+                admission.admission_date, cursor + timedelta(days=1)
+            )
+        return created
+
+    @classmethod
     def generate_all_due_invoices(cls, as_of: date = None):
         """Generate any missing invoices for the current period of every active
         admission. Returns the list of newly created invoices. Idempotent.

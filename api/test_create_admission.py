@@ -6,10 +6,12 @@ the GraphQL-level rejection of a missing required field, and the ADMIN-only
 role restriction.
 """
 import re
+from datetime import date, timedelta
 
 import pytest
 
-from api.models import Admission, Bed, BedStatus, Patient, Room
+from api.billing import BillingService
+from api.models import Admission, Bed, BedStatus, Invoice, Patient, Room
 
 CREATE_ADMISSION = """
 mutation Create($input: CreateAdmissionInput!) {
@@ -82,6 +84,39 @@ def test_gender_is_optional_and_defaults_blank(admin_client, vacant_bed):
     assert result.get("errors") is None
     assert result["data"]["createAdmission"]["patient"]["gender"] == ""
     assert Patient.objects.get().gender == ""
+
+
+def test_age_is_optional(admin_client, vacant_bed):
+    payload = _input(vacant_bed)
+    del payload["age"]  # age is now optional on the input.
+    result = admin_client.execute(CREATE_ADMISSION, {"input": payload})
+    assert result.get("errors") is None
+    assert result["data"]["createAdmission"]["patient"]["age"] is None
+    assert Patient.objects.get().age is None
+
+
+def test_new_admission_is_billed_on_creation(admin_client, vacant_bed):
+    # Back-date two-plus months so several cycles are already due.
+    admission_date = (date.today() - timedelta(days=75)).isoformat()
+    result = admin_client.execute(
+        CREATE_ADMISSION,
+        {"input": _input(vacant_bed, admissionDate=admission_date)},
+    )
+    assert result.get("errors") is None
+    admission = Admission.objects.get()
+
+    # Every due period is billed, so the unpaid admission has outstanding dues.
+    assert Invoice.objects.filter(admission=admission).count() >= 2
+    assert BillingService.total_pending_dues(admission) > 0
+
+
+def test_future_admission_is_not_billed_yet(admin_client, vacant_bed):
+    future = (date.today() + timedelta(days=10)).isoformat()
+    admin_client.execute(
+        CREATE_ADMISSION, {"input": _input(vacant_bed, admissionDate=future)}
+    )
+    admission = Admission.objects.get()
+    assert Invoice.objects.filter(admission=admission).count() == 0
 
 
 def test_duplicate_bed_is_rejected(admin_client, vacant_bed):
