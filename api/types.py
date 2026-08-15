@@ -183,6 +183,31 @@ class PaymentAccountType:
     is_active: auto
 
 
+@strawberry_django.type(models.PaymentReceipt)
+class PaymentReceiptType:
+    id: auto
+    paid_on: auto
+    amount: auto
+    fees_amount: auto
+    charges_amount: auto
+    account: Optional[PaymentAccountType]
+    recorded_by: Optional[UserType]
+    created_at: auto
+
+    # Flattened patient info for the payments-history grid.
+    @strawberry.field
+    def patient_pk(self) -> strawberry.ID:
+        return self.admission.patient_id
+
+    @strawberry.field
+    def patient_name(self) -> str:
+        return self.admission.patient.name
+
+    @strawberry.field
+    def patient_code(self) -> str:
+        return self.admission.patient.patient_id
+
+
 @strawberry_django.type(models.Payment)
 class PaymentType:
     id: auto

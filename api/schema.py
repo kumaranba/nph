@@ -16,15 +16,15 @@ from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee, Gender,
-    Invoice, InvoiceStatus, Patient, Payment, PaymentAccount, Room,
-    SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
+    Invoice, InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
+    Room, SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
     VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
     AdditionalChargeType, AdmissionType, BedType, FeeType, InvoiceType,
-    PatientType, PaymentAccountType, PaymentType, RoomType, TagType, UserType,
-    VitalReadingType, VitalsThresholdType,
+    PatientType, PaymentAccountType, PaymentReceiptType, PaymentType, RoomType,
+    TagType, UserType, VitalReadingType, VitalsThresholdType,
 )
 
 
@@ -434,6 +434,26 @@ class Query:
     @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def payment_accounts(self, info: Info) -> List[PaymentAccountType]:
         return PaymentAccount.objects.filter(is_active=True).order_by('name')
+
+    # Payments received in a date range (each a receipt / payment event),
+    # newest first. Bounds are inclusive; omit either for an open end.
+    # ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def payment_receipts(
+        self,
+        info: Info,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> List[PaymentReceiptType]:
+        qs = PaymentReceipt.objects.select_related(
+            'admission__patient', 'account', 'recorded_by'
+        )
+        if date_from is not None:
+            qs = qs.filter(paid_on__gte=date_from)
+        if date_to is not None:
+            qs = qs.filter(paid_on__lte=date_to)
+        return qs.order_by('-paid_on', '-id')
 
     # A patient's invoice for a single billing month. `period` is "YYYY-MM";
     # `patient_id` is the patient's primary key. ADMIN + FINANCE.

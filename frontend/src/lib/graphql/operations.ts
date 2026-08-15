@@ -486,6 +486,25 @@ export const PAYMENT_ACCOUNTS = gql`
   }
 `;
 
+// Payments received in a date range (each a receipt), newest first.
+export const PAYMENT_RECEIPTS = gql`
+  query PaymentReceipts($from: Date, $to: Date) {
+    paymentReceipts(dateFrom: $from, dateTo: $to) {
+      id
+      patientPk
+      patientName
+      patientCode
+      paidOn
+      amount
+      feesAmount
+      chargesAmount
+      account {
+        name
+      }
+    }
+  }
+`;
+
 export const RECORD_PATIENT_PAYMENT = gql`
   mutation RecordPatientPayment(
     $patientId: ID!

@@ -124,3 +124,98 @@ def fees_due_pdf(buffer, as_of: date = None):
         _section(story, styles, "Unspecified Gender", others, as_of)
     doc.build(story)
     return buffer
+
+
+# ---------------------------------------------------------------------------
+# Payment receipt / bill (one payment event)
+# ---------------------------------------------------------------------------
+
+def receipt_pdf(buffer, receipt):
+    """Render a Bill/Receipt for a single ``PaymentReceipt`` into ``buffer``."""
+    from decimal import Decimal
+
+    patient = receipt.admission.patient
+    styles = _build_styles()
+    label = ParagraphStyle(
+        "lbl", parent=styles["cell"], fontSize=10,
+        textColor=colors.HexColor("#555555"),
+    )
+    value = ParagraphStyle("val", parent=styles["cell"], fontSize=10)
+
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        topMargin=16 * mm, bottomMargin=16 * mm,
+        leftMargin=16 * mm, rightMargin=16 * mm,
+        title=f"Payment Receipt #{receipt.id}",
+    )
+    story = [
+        Paragraph("Nila Psychiatric Hospital", styles["title"]),
+        Paragraph(
+            f"Payment Receipt #{receipt.id}  |  {_fmt_date(receipt.paid_on)}",
+            styles["sub"],
+        ),
+    ]
+
+    # Patient / meta block.
+    meta = [
+        ["Patient", Paragraph(patient.name, value)],
+        ["Patient ID", Paragraph(patient.patient_id, value)],
+        ["Received at", Paragraph(receipt.account.name if receipt.account else "-", value)],
+        ["Recorded by", Paragraph(
+            receipt.recorded_by.email if receipt.recorded_by else "-", value)],
+    ]
+    meta_table = Table(meta, colWidths=[35 * mm, 143 * mm])
+    meta_table.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#555555")),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(meta_table)
+
+    # Amount breakdown.
+    allocated = sum((p.amount for p in receipt.payments.all()), Decimal("0"))
+    advance = receipt.amount - allocated
+    amount_rows = [
+        ["Fees payment", _rupee(receipt.fees_amount)],
+        ["Additional charges", _rupee(receipt.charges_amount)],
+        ["Total received", _rupee(receipt.amount)],
+    ]
+    amt_table = Table(amount_rows, colWidths=[143 * mm, 35 * mm])
+    amt_table.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("LINEABOVE", (0, 2), (-1, 2), 0.6, colors.HexColor("#1f2937")),
+        ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(Paragraph("<br/>", styles["cell"]))
+    story.append(amt_table)
+
+    # What the payment settled (billing periods) + any advance credit.
+    lines = [["Billing period", "Applied"]]
+    for p in receipt.payments.order_by("invoice__billing_period_start"):
+        inv = p.invoice
+        period = ("Opening balance" if inv.is_opening_balance
+                  else inv.billing_period_start.strftime("%b %Y"))
+        lines.append([period, _rupee(p.amount)])
+    if advance > 0:
+        lines.append(["Advance credit (held)", _rupee(advance)])
+    if len(lines) > 1:
+        alloc_table = Table(lines, colWidths=[143 * mm, 35 * mm], repeatRows=1)
+        alloc_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(Paragraph("<br/>Applied to", label))
+        story.append(alloc_table)
+
+    doc.build(story)
+    return buffer
