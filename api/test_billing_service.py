@@ -42,6 +42,24 @@ def _admission(admission_date, *, monthly_fee="25000.00", label="A1"):
     )
 
 
+def test_generate_all_due_for_admission_backfills_every_period(db):
+    # Admitted Jan 15; as of Apr 20 → Jan, Feb, Mar, Apr cycles are all due.
+    admission = _admission(date(2026, 1, 15), monthly_fee="10000.00")
+    created = BillingService.generate_all_due_for_admission(
+        admission.id, as_of=date(2026, 4, 20)
+    )
+    assert len(created) == 4
+    starts = sorted(i.billing_period_start for i in admission.invoices.all())
+    assert starts == [
+        date(2026, 1, 15), date(2026, 2, 15),
+        date(2026, 3, 15), date(2026, 4, 15),
+    ]
+    # Idempotent — a second run creates nothing.
+    assert BillingService.generate_all_due_for_admission(
+        admission.id, as_of=date(2026, 4, 20)
+    ) == []
+
+
 # --------------------------------------------------------------- cycle dates
 @pytest.mark.parametrize(
     "anchor, month, year, expected",

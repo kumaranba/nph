@@ -98,7 +98,7 @@ export default function NewAdmissionPage() {
       variables: {
         input: {
           name: values.name,
-          age: Number(values.age),
+          age: values.age === "" ? null : Number(values.age),
           gender: values.gender || undefined,
           diagnosis: values.diagnosis,
           admittingDoctor: values.admittingDoctor,
@@ -140,13 +140,12 @@ export default function NewAdmissionPage() {
             {/* Age + gender + admission date */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="age">Age</Label>
+                <Label htmlFor="age">Age (optional)</Label>
                 <Input
                   id="age"
                   type="number"
                   min={0}
                   {...register("age", {
-                    required: "Age is required",
                     min: { value: 0, message: "Age must be positive" },
                   })}
                 />
