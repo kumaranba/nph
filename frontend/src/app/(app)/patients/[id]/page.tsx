@@ -93,6 +93,8 @@ export default function PatientProfilePage() {
   );
   // ADMIN and FINANCE may discharge; NURSE may not.
   const canDischarge = role === "ADMIN" || role === "FINANCE";
+  // ADMIN and FINANCE may record payments.
+  const canRecordPayment = role === "ADMIN" || role === "FINANCE";
   // ADMIN and NURSE (clinical staff) may edit tags; FINANCE is view-only.
   const canEditTags = role === "ADMIN" || role === "NURSE";
   // Show the charge log for the active admission, else the most recent one.
@@ -164,6 +166,21 @@ export default function PatientProfilePage() {
               >
                 View current invoice
               </Button>
+
+              {canRecordPayment ? (
+                <Button
+                  className="w-full"
+                  onClick={() =>
+                    router.push(
+                      `/payments/new?id=${patient.id}` +
+                        `&name=${encodeURIComponent(patient.name)}` +
+                        `&code=${encodeURIComponent(patient.patientId)}`
+                    )
+                  }
+                >
+                  Record payment
+                </Button>
+              ) : null}
 
               {activeAdmission && canDischarge ? (
                 <Button

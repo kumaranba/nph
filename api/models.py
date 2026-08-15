@@ -309,6 +309,56 @@ class Invoice(models.Model):
 # Payment
 # ---------------------------------------------------------------------------
 
+class PaymentAccount(models.Model):
+    """Where a payment was received (e.g. Nila, Vaigari, Bank AC).
+
+    Managed as config data — seeded with the initial set and extendable later.
+    ``is_active`` hides an account from new-payment pickers without deleting
+    its history.
+    """
+    name = models.CharField(max_length=50, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class PaymentReceipt(models.Model):
+    """One payment event — the money a patient handed over in one go.
+
+    Groups the per-invoice ``Payment`` allocations it funded, and records the
+    fees-vs-charges split and the receiving account for the receipt/bill. The
+    split is informational (for the receipt); allocation is still oldest-first
+    across the total.
+    """
+    admission = models.ForeignKey(
+        Admission, on_delete=models.PROTECT, related_name='payment_receipts'
+    )
+    paid_on = models.DateField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2)  # fees + charges
+    fees_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    charges_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    account = models.ForeignKey(
+        PaymentAccount, on_delete=models.PROTECT, related_name='receipts',
+        null=True, blank=True,
+    )
+    recorded_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='payment_receipts',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-paid_on', '-id']
+
+    def __str__(self):
+        return f'Receipt #{self.pk} — ₹{self.amount} on {self.paid_on}'
+
+
 class Payment(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name='payments')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -317,6 +367,12 @@ class Payment(models.Model):
     # (no human recorder at the moment it was drawn down).
     recorded_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name='recorded_payments',
+        null=True, blank=True,
+    )
+    # The receipt (payment event) this allocation belongs to. Null for
+    # credit-funded auto-payments, which have no receipt.
+    receipt = models.ForeignKey(
+        PaymentReceipt, on_delete=models.CASCADE, related_name='payments',
         null=True, blank=True,
     )
 

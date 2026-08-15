@@ -302,17 +302,38 @@ class BillingService:
 
     @classmethod
     @transaction.atomic
-    def record_payment_for_admission(cls, admission, amount, paid_on, recorded_by):
+    def record_payment_for_admission(
+        cls, admission, fees_amount, charges_amount, paid_on, recorded_by,
+        account=None,
+    ):
         """Record a payment for an admission. Clears outstanding invoices
         oldest-first; any surplus is held as advance credit on the admission
         (applied automatically as future monthly invoices come due).
 
-        Returns ``(allocations, credit_added)`` where each allocation is
-        ``(invoice, amount_applied)``.
-        """
-        from .models import Payment
+        ``fees_amount`` + ``charges_amount`` is the total paid; the split and
+        the receiving ``account`` are captured on a PaymentReceipt for the
+        receipt/bill (informational — allocation is on the combined total).
 
-        remaining = Decimal(amount)
+        Returns ``(receipt, allocations, credit_added)`` where each allocation
+        is ``(invoice, amount_applied)``.
+        """
+        from .models import Payment, PaymentReceipt
+
+        fees_amount = Decimal(fees_amount)
+        charges_amount = Decimal(charges_amount)
+        total = fees_amount + charges_amount
+
+        receipt = PaymentReceipt.objects.create(
+            admission=admission,
+            paid_on=paid_on,
+            amount=total,
+            fees_amount=fees_amount,
+            charges_amount=charges_amount,
+            account=account,
+            recorded_by=recorded_by,
+        )
+
+        remaining = total
         allocations = []
 
         outstanding = admission.invoices.filter(
@@ -330,6 +351,7 @@ class BillingService:
                 amount=applied,
                 paid_on=paid_on,
                 recorded_by=recorded_by,
+                receipt=receipt,
             )
             cls.recompute_status(invoice)
             remaining -= applied
@@ -340,4 +362,4 @@ class BillingService:
             admission.credit_balance = (admission.credit_balance or Decimal("0")) + credit_added
             admission.save(update_fields=["credit_balance"])
 
-        return allocations, credit_added
+        return receipt, allocations, credit_added

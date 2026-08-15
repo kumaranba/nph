@@ -459,19 +459,36 @@ export const CHANGE_FEE = gql`
 `;
 
 // Record a patient-level payment (clears outstanding + advances future months).
+export const PAYMENT_ACCOUNTS = gql`
+  query PaymentAccounts {
+    paymentAccounts {
+      id
+      name
+    }
+  }
+`;
+
 export const RECORD_PATIENT_PAYMENT = gql`
   mutation RecordPatientPayment(
     $patientId: ID!
-    $amount: Decimal!
+    $feesAmount: Decimal!
+    $chargesAmount: Decimal!
     $paidOn: Date!
+    $accountId: ID
   ) {
     recordPatientPayment(
       patientId: $patientId
-      amount: $amount
+      feesAmount: $feesAmount
+      chargesAmount: $chargesAmount
       paidOn: $paidOn
+      accountId: $accountId
     ) {
       patientId
+      receiptId
       totalRecorded
+      feesAmount
+      chargesAmount
+      account
       invoicesPaid
       creditAdded
       creditBalance

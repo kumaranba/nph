@@ -176,13 +176,20 @@ class InvoiceType:
         return self.total_due - (self.refund_amount or Decimal('0')) - paid
 
 
+@strawberry_django.type(models.PaymentAccount)
+class PaymentAccountType:
+    id: auto
+    name: auto
+    is_active: auto
+
+
 @strawberry_django.type(models.Payment)
 class PaymentType:
     id: auto
     invoice: InvoiceType
     amount: auto
     paid_on: auto
-    recorded_by: UserType
+    recorded_by: Optional[UserType]
 
 
 @strawberry_django.type(models.AdditionalCharge)
