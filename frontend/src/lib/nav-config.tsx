@@ -3,6 +3,7 @@ import {
   Banknote,
   Building2,
   HeartPulse,
+  History,
   LayoutDashboard,
   Receipt,
   Search,
@@ -46,6 +47,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Fees due", href: "/fees-due", icon: Wallet },
       { label: "Record payment", href: "/payments/new", icon: Banknote },
+      { label: "Payments history", href: "/payments/history", icon: History },
       { label: "Change fee", href: "/fees/change", icon: Receipt },
     ],
   },
