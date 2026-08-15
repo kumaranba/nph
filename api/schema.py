@@ -154,6 +154,22 @@ class CreateAdmissionInput:
     gender: Optional[GenderEnum] = None
 
 
+@strawberry.input
+class UpdatePatientInput:
+    """Editable patient profile fields. Every field is optional: only the ones
+    provided are changed (UNSET means "leave as-is"). ``age`` and ``gender`` may
+    be explicitly cleared by sending null.
+    """
+    name: Optional[str] = strawberry.UNSET
+    age: Optional[int] = strawberry.UNSET
+    gender: Optional[GenderEnum] = strawberry.UNSET
+    diagnosis: Optional[str] = strawberry.UNSET
+    admitting_doctor: Optional[str] = strawberry.UNSET
+    guardian_name: Optional[str] = strawberry.UNSET
+    guardian_phone: Optional[str] = strawberry.UNSET
+    place: Optional[str] = strawberry.UNSET
+
+
 # Number of days before an invoice's period end that we flag it "due soon".
 DUE_SOON_WINDOW_DAYS = 7
 
@@ -1090,6 +1106,54 @@ class Mutation:
             BillingService.generate_all_due_for_admission(admission.id)
 
         return admission
+
+    # Edit a patient's profile fields. ADMIN only. Only the fields provided are
+    # changed; age/gender may be cleared by sending null.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def update_patient(
+        self, info: Info, patient_id: strawberry.ID, input: UpdatePatientInput
+    ) -> PatientType:
+        try:
+            patient = Patient.objects.get(pk=patient_id)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
+
+        UNSET = strawberry.UNSET
+        update_fields = []
+
+        if input.name is not UNSET:
+            if not (input.name or '').strip():
+                raise GraphQLError('Patient name cannot be empty.')
+            patient.name = input.name.strip()
+            update_fields.append('name')
+        if input.age is not UNSET:
+            if input.age is not None and input.age < 0:
+                raise GraphQLError('Age must be a positive number.')
+            patient.age = input.age
+            update_fields.append('age')
+        if input.gender is not UNSET:
+            patient.gender = input.gender.value if input.gender else ''
+            update_fields.append('gender')
+        if input.diagnosis is not UNSET:
+            patient.diagnosis = input.diagnosis or ''
+            update_fields.append('diagnosis')
+        if input.admitting_doctor is not UNSET:
+            patient.admitting_doctor = input.admitting_doctor or ''
+            update_fields.append('admitting_doctor')
+        if input.guardian_name is not UNSET:
+            patient.guardian_name = input.guardian_name or ''
+            update_fields.append('guardian_name')
+        if input.guardian_phone is not UNSET:
+            patient.guardian_phone = input.guardian_phone or ''
+            update_fields.append('guardian_phone')
+        if input.place is not UNSET:
+            patient.place = input.place or ''
+            update_fields.append('place')
+
+        if update_fields:
+            patient.save(update_fields=update_fields)
+        return patient
 
     # Attach one or more tags to a patient, creating any that don't yet exist
     # (matched case-insensitively). `category` is applied only to newly-created

@@ -162,10 +162,12 @@ export const PATIENT = gql`
       patientId
       name
       age
+      gender
       diagnosis
       guardianName
       guardianPhone
       admittingDoctor
+      place
       createdAt
       tags { id name label category }
       admissions {
@@ -200,6 +202,22 @@ export const PATIENT = gql`
           description
         }
       }
+    }
+  }
+`;
+
+export const UPDATE_PATIENT = gql`
+  mutation UpdatePatient($patientId: ID!, $input: UpdatePatientInput!) {
+    updatePatient(patientId: $patientId, input: $input) {
+      id
+      name
+      age
+      gender
+      diagnosis
+      admittingDoctor
+      guardianName
+      guardianPhone
+      place
     }
   }
 `;

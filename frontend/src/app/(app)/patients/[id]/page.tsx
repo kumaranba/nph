@@ -9,6 +9,7 @@ import {
   type Charge,
 } from "@/components/additional-charges-panel";
 import { DischargeModal } from "@/components/discharge-modal";
+import { EditPatientModal } from "@/components/edit-patient-modal";
 import { PatientTagsPanel } from "@/components/patient-tags-panel";
 import { type Tag } from "@/components/tag-input";
 import { LinesSkeleton, QueryError } from "@/components/query-states";
@@ -40,11 +41,13 @@ type PatientResult = {
     id: string;
     patientId: string;
     name: string;
-    age: number;
+    age: number | null;
+    gender: string;
     diagnosis: string;
     guardianName: string;
     guardianPhone: string;
     admittingDoctor: string;
+    place: string;
     createdAt: string;
     tags: Tag[];
     admissions: Admission[];
@@ -57,6 +60,7 @@ export default function PatientProfilePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const [showDischarge, setShowDischarge] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -97,6 +101,8 @@ export default function PatientProfilePage() {
   const canRecordPayment = role === "ADMIN" || role === "FINANCE";
   // ADMIN and NURSE (clinical staff) may edit tags; FINANCE is view-only.
   const canEditTags = role === "ADMIN" || role === "NURSE";
+  // Only ADMIN may edit patient profile details.
+  const canEditPatient = role === "ADMIN";
   // Show the charge log for the active admission, else the most recent one.
   const chargesAdmission =
     activeAdmission ??
@@ -110,18 +116,37 @@ export default function PatientProfilePage() {
     <main className="mx-auto min-h-screen w-full max-w-md space-y-6 p-4 sm:p-6 lg:p-8">
       <Card>
         <CardHeader>
-          <CardTitle>{patient ? patient.name : "Patient not found"}</CardTitle>
-          {patient ? (
-            <CardDescription>{patient.patientId}</CardDescription>
-          ) : null}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>
+                {patient ? patient.name : "Patient not found"}
+              </CardTitle>
+              {patient ? (
+                <CardDescription>{patient.patientId}</CardDescription>
+              ) : null}
+            </div>
+            {patient && canEditPatient ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEdit(true)}
+              >
+                Edit
+              </Button>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {patient ? (
             <>
               <dl className="space-y-2 text-sm">
-                <Row label="Age" value={String(patient.age)} />
+                <Row
+                  label="Age"
+                  value={patient.age === null ? "—" : String(patient.age)}
+                />
                 <Row label="Diagnosis" value={patient.diagnosis} />
                 <Row label="Admitting doctor" value={patient.admittingDoctor} />
+                <Row label="Place" value={patient.place || "—"} />
                 <Row label="Guardian" value={patient.guardianName || "—"} />
                 <Row
                   label="Guardian phone"
@@ -227,6 +252,23 @@ export default function PatientProfilePage() {
           hasOutstandingDues={activeAdmission.hasOutstandingDues}
           outstandingInvoiceCount={activeAdmission.outstandingInvoiceCount}
           onClose={() => setShowDischarge(false)}
+        />
+      ) : null}
+
+      {showEdit && patient ? (
+        <EditPatientModal
+          patient={{
+            id: patient.id,
+            name: patient.name,
+            age: patient.age,
+            gender: patient.gender,
+            diagnosis: patient.diagnosis,
+            admittingDoctor: patient.admittingDoctor,
+            guardianName: patient.guardianName,
+            guardianPhone: patient.guardianPhone,
+            place: patient.place,
+          }}
+          onClose={() => setShowEdit(false)}
         />
       ) : null}
     </main>
