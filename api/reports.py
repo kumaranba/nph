@@ -219,3 +219,77 @@ def receipt_pdf(buffer, receipt):
 
     doc.build(story)
     return buffer
+
+
+# ---------------------------------------------------------------------------
+# Patient account statement
+# ---------------------------------------------------------------------------
+
+def account_statement_pdf(buffer, statement):
+    """Render a patient account statement (``AccountStatement``) into buffer."""
+    styles = _build_styles()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        topMargin=14 * mm, bottomMargin=14 * mm,
+        leftMargin=14 * mm, rightMargin=14 * mm,
+        title=f"Account Statement — {statement.patient_code}",
+    )
+
+    span = "all dates"
+    if statement.date_from or statement.date_to:
+        span = (f"{_fmt_date(statement.date_from) if statement.date_from else '…'}"
+                f" to {_fmt_date(statement.date_to) if statement.date_to else '…'}")
+
+    story = [
+        Paragraph("Nila Psychiatric Hospital", styles["title"]),
+        Paragraph(
+            f"Account Statement  |  {statement.patient_name} "
+            f"({statement.patient_code})  |  {span}",
+            styles["sub"],
+        ),
+    ]
+
+    rows = [["Date", "Description", "Debit", "Credit", "Balance"]]
+    rows.append(["", "Opening balance", "", "", _rupee(statement.opening_balance)])
+    for ln in statement.lines:
+        rows.append([
+            _fmt_date(ln.date),
+            Paragraph(ln.description, styles["cell"]),
+            _rupee(ln.debit) if ln.debit else "",
+            _rupee(ln.credit) if ln.credit else "",
+            _rupee(ln.balance),
+        ])
+    rows.append([
+        "", "Closing balance",
+        _rupee(statement.total_debits), _rupee(statement.total_credits),
+        _rupee(statement.closing_balance),
+    ])
+
+    table = Table(
+        rows, colWidths=[26 * mm, 74 * mm, 26 * mm, 26 * mm, 30 * mm], repeatRows=1
+    )
+    last = len(rows) - 1
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (2, 0), (4, -1), "RIGHT"),
+        ("FONTNAME", (0, 1), (-1, 1), "Helvetica-Bold"),
+        ("LINEABOVE", (0, last), (-1, last), 0.6, colors.HexColor("#1f2937")),
+        ("FONTNAME", (0, last), (-1, last), "Helvetica-Bold"),
+        ("ROWBACKGROUNDS", (0, 2), (-1, last - 1),
+         [colors.white, colors.HexColor("#f3f4f6")]),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(table)
+
+    note = ("A negative balance is advance credit held on the account."
+            if statement.closing_balance < 0 else "")
+    if note:
+        story.append(Paragraph(f"<br/>{note}", styles["sub"]))
+
+    doc.build(story)
+    return buffer

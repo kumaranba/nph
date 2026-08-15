@@ -486,6 +486,27 @@ export const PAYMENT_ACCOUNTS = gql`
   }
 `;
 
+// A patient's account ledger (invoices vs payments) over an optional range.
+export const ACCOUNT_STATEMENT = gql`
+  query AccountStatement($pid: ID!, $from: Date, $to: Date) {
+    accountStatement(patientId: $pid, dateFrom: $from, dateTo: $to) {
+      patientName
+      patientCode
+      openingBalance
+      closingBalance
+      totalDebits
+      totalCredits
+      lines {
+        date
+        description
+        debit
+        credit
+        balance
+      }
+    }
+  }
+`;
+
 // Payments received in a date range (each a receipt), newest first.
 export const PAYMENT_RECEIPTS = gql`
   query PaymentReceipts($from: Date, $to: Date) {

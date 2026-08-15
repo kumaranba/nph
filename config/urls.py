@@ -3,7 +3,12 @@ from django.urls import path
 from django.views.decorators.csrf import csrf_exempt
 
 from api.schema import schema
-from api.views import JWTGraphQLView, fees_due_pdf_view, receipt_pdf_view
+from api.views import (
+    JWTGraphQLView,
+    account_statement_pdf_view,
+    fees_due_pdf_view,
+    receipt_pdf_view,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -14,4 +19,7 @@ urlpatterns = [
     path('reports/fees-due.pdf', csrf_exempt(fees_due_pdf_view)),
     # Payment receipt/bill (PDF). Bearer-auth, ADMIN + FINANCE.
     path('reports/receipt/<int:receipt_id>.pdf', csrf_exempt(receipt_pdf_view)),
+    # Patient account statement (PDF). Bearer-auth, ADMIN + FINANCE.
+    path('reports/statement/<int:patient_id>.pdf',
+         csrf_exempt(account_statement_pdf_view)),
 ]

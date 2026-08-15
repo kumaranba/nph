@@ -207,6 +207,18 @@ export default function PatientProfilePage() {
                 </Button>
               ) : null}
 
+              {canRecordPayment ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() =>
+                    router.push(`/patients/${patient.id}/statement`)
+                  }
+                >
+                  Account statement
+                </Button>
+              ) : null}
+
               {activeAdmission && canDischarge ? (
                 <Button
                   variant="destructive"

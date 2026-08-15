@@ -319,6 +319,111 @@ def build_pending_dues(as_of: date = None) -> List['PendingDueItem']:
 
 
 # ---------------------------------------------------------------------------
+# Patient account statement
+# ---------------------------------------------------------------------------
+
+@strawberry.type
+class StatementLine:
+    """One ledger entry: a billed invoice (debit) or a payment received
+    (credit), with the running account balance after it."""
+    date: date
+    description: str
+    debit: Decimal
+    credit: Decimal
+    balance: Decimal
+
+
+@strawberry.type
+class AccountStatement:
+    """A patient's account ledger over a date range. Balance is cash-based:
+    invoices billed (debits) minus payments received (credits). A negative
+    balance means the account is in advance credit."""
+    patient_id: strawberry.ID
+    patient_name: str
+    patient_code: str
+    date_from: Optional[date]
+    date_to: Optional[date]
+    opening_balance: Decimal
+    closing_balance: Decimal
+    total_debits: Decimal
+    total_credits: Decimal
+    lines: List[StatementLine]
+
+
+def build_account_statement(
+    patient_id, date_from: date = None, date_to: date = None
+) -> AccountStatement:
+    """Build a patient's account statement across all their admissions.
+
+    Debits are invoices (by billing period start; total_due already includes
+    that period's additional charges). Credits are payments received (by
+    paid_on). Shared by the ``accountStatement`` query and the statement PDF.
+    """
+    patient = Patient.objects.get(pk=patient_id)
+    invoices = Invoice.objects.filter(admission__patient=patient)
+    receipts = PaymentReceipt.objects.filter(admission__patient=patient)
+
+    # Opening balance = everything billed less received strictly before the
+    # range start.
+    opening = Decimal('0')
+    if date_from is not None:
+        opening += sum(
+            (i.total_due for i in invoices.filter(billing_period_start__lt=date_from)),
+            Decimal('0'),
+        )
+        opening -= sum(
+            (r.amount for r in receipts.filter(paid_on__lt=date_from)),
+            Decimal('0'),
+        )
+
+    inv_q = invoices
+    rcpt_q = receipts
+    if date_from is not None:
+        inv_q = inv_q.filter(billing_period_start__gte=date_from)
+        rcpt_q = rcpt_q.filter(paid_on__gte=date_from)
+    if date_to is not None:
+        inv_q = inv_q.filter(billing_period_start__lte=date_to)
+        rcpt_q = rcpt_q.filter(paid_on__lte=date_to)
+
+    # (date, sort_rank, description, debit, credit). Invoices (rank 0) sort
+    # before payments (rank 1) on the same day.
+    events = []
+    for inv in inv_q:
+        desc = ('Opening balance' if inv.is_opening_balance
+                else f"Fee — {inv.billing_period_start.strftime('%b %Y')}")
+        events.append((inv.billing_period_start, 0, desc, inv.total_due, Decimal('0')))
+    for r in rcpt_q:
+        acct = f" ({r.account.name})" if r.account else ''
+        events.append((r.paid_on, 1, f"Payment{acct}", Decimal('0'), r.amount))
+    events.sort(key=lambda e: (e[0], e[1]))
+
+    balance = opening
+    lines: List[StatementLine] = []
+    total_debits = Decimal('0')
+    total_credits = Decimal('0')
+    for d, _rank, desc, debit, credit in events:
+        balance += debit - credit
+        total_debits += debit
+        total_credits += credit
+        lines.append(StatementLine(
+            date=d, description=desc, debit=debit, credit=credit, balance=balance,
+        ))
+
+    return AccountStatement(
+        patient_id=patient.id,
+        patient_name=patient.name,
+        patient_code=patient.patient_id,
+        date_from=date_from,
+        date_to=date_to,
+        opening_balance=opening,
+        closing_balance=balance,
+        total_debits=total_debits,
+        total_credits=total_credits,
+        lines=lines,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dashboard result types
 # ---------------------------------------------------------------------------
 
@@ -454,6 +559,22 @@ class Query:
         if date_to is not None:
             qs = qs.filter(paid_on__lte=date_to)
         return qs.order_by('-paid_on', '-id')
+
+    # A patient's account statement (invoices billed vs payments received) over
+    # an optional date range, with a running balance. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def account_statement(
+        self,
+        info: Info,
+        patient_id: strawberry.ID,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> AccountStatement:
+        try:
+            return build_account_statement(patient_id, date_from, date_to)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
 
     # A patient's invoice for a single billing month. `period` is "YYYY-MM";
     # `patient_id` is the patient's primary key. ADMIN + FINANCE.
