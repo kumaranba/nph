@@ -16,14 +16,15 @@ from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee, Gender,
-    Invoice, InvoiceStatus, Patient, Payment, Room, SystemSetting, Tag,
-    TagCategory, User, UserRole, VitalReading, VitalsThreshold,
+    Invoice, InvoiceStatus, Patient, Payment, PaymentAccount, Room,
+    SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
+    VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
     AdditionalChargeType, AdmissionType, BedType, FeeType, InvoiceType,
-    PatientType, PaymentType, RoomType, TagType, UserType, VitalReadingType,
-    VitalsThresholdType,
+    PatientType, PaymentAccountType, PaymentType, RoomType, TagType, UserType,
+    VitalReadingType, VitalsThresholdType,
 )
 
 
@@ -364,7 +365,11 @@ class RecordPaymentResult:
     to be drawn down automatically as future monthly invoices come due.
     """
     patient_id: strawberry.ID
+    receipt_id: strawberry.ID
     total_recorded: Decimal
+    fees_amount: Decimal
+    charges_amount: Decimal
+    account: Optional[str]
     invoices_paid: int
     credit_added: Decimal
     credit_balance: Decimal
@@ -406,6 +411,13 @@ class Query:
     @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def payments(self, info: Info) -> List[PaymentType]:
         return Payment.objects.all()
+
+    # Active payment accounts (Nila / Vaigari / Bank AC …) for the record-
+    # payment picker. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def payment_accounts(self, info: Info) -> List[PaymentAccountType]:
+        return PaymentAccount.objects.filter(is_active=True).order_by('name')
 
     # A patient's invoice for a single billing month. `period` is "YYYY-MM";
     # `patient_id` is the patient's primary key. ADMIN + FINANCE.
@@ -789,11 +801,22 @@ class Mutation:
         self,
         info: Info,
         patient_id: strawberry.ID,
-        amount: Decimal,
         paid_on: date,
+        fees_amount: Decimal = Decimal('0'),
+        charges_amount: Decimal = Decimal('0'),
+        account_id: Optional[strawberry.ID] = None,
     ) -> RecordPaymentResult:
-        if amount <= 0:
-            raise GraphQLError('Amount must be positive.')
+        if fees_amount < 0 or charges_amount < 0:
+            raise GraphQLError('Amounts cannot be negative.')
+        if fees_amount + charges_amount <= 0:
+            raise GraphQLError('Payment total must be positive.')
+
+        account = None
+        if account_id is not None:
+            try:
+                account = PaymentAccount.objects.get(pk=account_id, is_active=True)
+            except PaymentAccount.DoesNotExist:
+                raise GraphQLError('Payment account not found.')
 
         admission = (
             Admission.objects.filter(
@@ -808,13 +831,20 @@ class Mutation:
         if admission is None:
             raise GraphQLError('No admission found for this patient.')
 
-        allocations, credit_added = BillingService.record_payment_for_admission(
-            admission, amount, paid_on, info.context.request.user
+        receipt, allocations, credit_added = (
+            BillingService.record_payment_for_admission(
+                admission, fees_amount, charges_amount, paid_on,
+                info.context.request.user, account=account,
+            )
         )
         admission.refresh_from_db()
         return RecordPaymentResult(
             patient_id=admission.patient_id,
-            total_recorded=amount,
+            receipt_id=receipt.id,
+            total_recorded=receipt.amount,
+            fees_amount=receipt.fees_amount,
+            charges_amount=receipt.charges_amount,
+            account=account.name if account else None,
             invoices_paid=len(allocations),
             credit_added=credit_added,
             credit_balance=admission.credit_balance,

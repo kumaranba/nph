@@ -274,7 +274,7 @@ def test_payment_clears_opening_balance_first(tmp_path, db):
 
     # A 4000 payment lands on the oldest debt: the opening balance.
     BillingService.record_payment_for_admission(
-        admission, Decimal("4000"), date(2026, 8, 12), user
+        admission, Decimal("4000"), Decimal("0"), date(2026, 8, 12), user
     )
     opening = Invoice.objects.get(admission=admission, is_opening_balance=True)
     assert BillingService.balance_due(opening) == Decimal("9500")

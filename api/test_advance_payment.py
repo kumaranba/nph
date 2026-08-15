@@ -17,8 +17,10 @@ from api.models import (
 )
 
 RECORD = """
-mutation Record($patientId: ID!, $amount: Decimal!, $paidOn: Date!) {
-  recordPatientPayment(patientId: $patientId, amount: $amount, paidOn: $paidOn) {
+mutation Record($patientId: ID!, $feesAmount: Decimal!, $paidOn: Date!) {
+  recordPatientPayment(
+    patientId: $patientId, feesAmount: $feesAmount, paidOn: $paidOn
+  ) {
     totalRecorded
     invoicesPaid
     creditAdded
@@ -47,7 +49,7 @@ def patient_admission(db):
 
 
 def _vars(patient, amount):
-    return {"patientId": str(patient.id), "amount": amount, "paidOn": "2026-01-20"}
+    return {"patientId": str(patient.id), "feesAmount": amount, "paidOn": "2026-01-20"}
 
 
 def test_surplus_is_held_as_credit(finance_client, patient_admission):
