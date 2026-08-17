@@ -423,6 +423,17 @@ def build_account_statement(
     )
 
 
+def _resolve_active_account(account_id):
+    """Look up an active PaymentAccount by id, or None if id is None.
+    Raises GraphQLError if the id is given but not an active account."""
+    if account_id is None:
+        return None
+    try:
+        return PaymentAccount.objects.get(pk=account_id, is_active=True)
+    except PaymentAccount.DoesNotExist:
+        raise GraphQLError('Payment account not found.')
+
+
 # ---------------------------------------------------------------------------
 # Dashboard result types
 # ---------------------------------------------------------------------------
@@ -942,11 +953,21 @@ class Mutation:
             invoice = Invoice.objects.get(pk=invoice_id)
         except Invoice.DoesNotExist:
             raise GraphQLError('Invoice not found.')
+        # Grouped under a receipt so it appears in payments history / statement.
+        receipt = PaymentReceipt.objects.create(
+            admission=invoice.admission,
+            paid_on=paid_on,
+            amount=amount,
+            fees_amount=amount,
+            charges_amount=Decimal('0'),
+            recorded_by=info.context.request.user,
+        )
         return Payment.objects.create(
             invoice=invoice,
             amount=amount,
             paid_on=paid_on,
             recorded_by=info.context.request.user,
+            receipt=receipt,
         )
 
     # Record a payment for a PATIENT (not a single invoice). Clears their
@@ -968,12 +989,7 @@ class Mutation:
         if fees_amount + charges_amount <= 0:
             raise GraphQLError('Payment total must be positive.')
 
-        account = None
-        if account_id is not None:
-            try:
-                account = PaymentAccount.objects.get(pk=account_id, is_active=True)
-            except PaymentAccount.DoesNotExist:
-                raise GraphQLError('Payment account not found.')
+        account = _resolve_active_account(account_id)
 
         admission = (
             Admission.objects.filter(
@@ -1053,19 +1069,35 @@ class Mutation:
         invoice_id: strawberry.ID,
         amount: Decimal,
         paid_on: date,
+        account_id: Optional[strawberry.ID] = None,
     ) -> InvoiceType:
         if amount <= 0:
             raise GraphQLError('Payment amount must be positive.')
+        account = _resolve_active_account(account_id)
         with transaction.atomic():
             try:
                 invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
             except Invoice.DoesNotExist:
                 raise GraphQLError('Invoice not found.')
+            # Group this payment under a receipt so it appears in payments
+            # history and counts as a credit on the account statement. The whole
+            # amount is recorded against fees (this flow has no fees/charges
+            # split); the split is informational only.
+            receipt = PaymentReceipt.objects.create(
+                admission=invoice.admission,
+                paid_on=paid_on,
+                amount=amount,
+                fees_amount=amount,
+                charges_amount=Decimal('0'),
+                account=account,
+                recorded_by=info.context.request.user,
+            )
             Payment.objects.create(
                 invoice=invoice,
                 amount=amount,
                 paid_on=paid_on,
                 recorded_by=info.context.request.user,
+                receipt=receipt,
             )
             BillingService.recompute_status(invoice)
         return invoice
