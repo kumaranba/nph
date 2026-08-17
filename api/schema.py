@@ -385,13 +385,31 @@ def build_account_statement(
         inv_q = inv_q.filter(billing_period_start__lte=date_to)
         rcpt_q = rcpt_q.filter(paid_on__lte=date_to)
 
-    # (date, sort_rank, description, debit, credit). Invoices (rank 0) sort
-    # before payments (rank 1) on the same day.
+    # (date, sort_rank, description, debit, credit). Debits (rank 0) sort before
+    # payments (rank 1) on the same day. Each invoice is decomposed into its fee
+    # line plus one itemized line per additional charge, so charges show as
+    # their own debit lines.
     events = []
     for inv in inv_q:
-        desc = ('Opening balance' if inv.is_opening_balance
-                else f"Fee — {inv.billing_period_start.strftime('%b %Y')}")
-        events.append((inv.billing_period_start, 0, desc, inv.total_due, Decimal('0')))
+        if inv.is_opening_balance:
+            events.append((inv.billing_period_start, 0, 'Opening balance',
+                           inv.total_due, Decimal('0')))
+        elif inv.base_fee > 0:
+            events.append((inv.billing_period_start, 0,
+                           f"Fee — {inv.billing_period_start.strftime('%b %Y')}",
+                           inv.base_fee, Decimal('0')))
+        # Itemize this period's charges (skip the opening-balance sentinel).
+        if not inv.is_opening_balance:
+            charges = AdditionalCharge.objects.filter(
+                admission=inv.admission,
+                charge_date__gte=inv.billing_period_start,
+                charge_date__lte=inv.billing_period_end,
+            ).order_by('charge_date', 'id')
+            for c in charges:
+                label = c.get_category_display()
+                if c.description:
+                    label += f" · {c.description}"
+                events.append((c.charge_date, 0, label, c.amount, Decimal('0')))
     for r in rcpt_q:
         acct = f" ({r.account.name})" if r.account else ''
         events.append((r.paid_on, 1, f"Payment{acct}", Decimal('0'), r.amount))
@@ -1135,6 +1153,8 @@ class Mutation:
     ) -> AdditionalChargeType:
         if amount <= 0:
             raise GraphQLError('Charge amount must be positive.')
+        if charge_date > _today():
+            raise GraphQLError('Charge date cannot be in the future.')
         try:
             admission = Admission.objects.get(pk=admission_id)
         except Admission.DoesNotExist:
@@ -1142,14 +1162,19 @@ class Mutation:
         if admission.status != AdmissionStatus.ACTIVE:
             raise GraphQLError('Cannot add a charge to a discharged admission.')
 
-        return AdditionalCharge.objects.create(
-            admission=admission,
-            category=category.value,
-            amount=amount,
-            charge_date=charge_date,
-            description=description or '',
-            recorded_by=info.context.request.user,
-        )
+        with transaction.atomic():
+            charge = AdditionalCharge.objects.create(
+                admission=admission,
+                category=category.value,
+                amount=amount,
+                charge_date=charge_date,
+                description=description or '',
+                recorded_by=info.context.request.user,
+            )
+            # Bill it immediately so it can't be orphaned by cycle timing, an
+            # opening-balance-covered period, or a later discharge.
+            BillingService.bill_charge(charge)
+        return charge
 
     # Delete a charge, but only before its billing period has been invoiced.
     # FINANCE only.
@@ -1166,17 +1191,24 @@ class Mutation:
         start, end = BillingService._period_for(
             charge.admission.admission_date, charge.charge_date
         )
-        already_invoiced = Invoice.objects.filter(
+        # The charge sits on this period's monthly invoice, or a settlement
+        # invoice (opening-balance-covered period). Deleting is fine unless that
+        # invoice is already PAID — then it's settled and must not change.
+        invoice = Invoice.objects.filter(
             admission=charge.admission,
             billing_period_start=start,
             billing_period_end=end,
-        ).exists()
-        if already_invoiced:
+        ).order_by('is_settlement').first()  # prefer the fee invoice if both
+        if invoice is not None and invoice.status == InvoiceStatus.PAID:
             raise GraphQLError(
-                'Cannot delete a charge that has already been invoiced.'
+                'Cannot delete a charge whose invoice is already paid.'
             )
 
-        charge.delete()
+        with transaction.atomic():
+            charge.delete()
+            # Drop the charge's amount off the invoice it was billed on.
+            if invoice is not None:
+                BillingService.recompute_invoice_total(invoice)
         return True
 
     # Record a vitals reading. The server stamps recorded_at and evaluates
@@ -1405,6 +1437,11 @@ class Mutation:
 
             if admission.status == AdmissionStatus.DISCHARGED:
                 raise GraphQLError('Patient is already discharged.')
+
+            # Bill any additional charges that aren't on an invoice yet — after
+            # discharge no further invoices are generated, so this is the last
+            # chance to capture them.
+            BillingService.sweep_unbilled_charges(admission)
 
             outstanding_count = admission.invoices.filter(
                 status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
