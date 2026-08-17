@@ -293,6 +293,11 @@ class Invoice(models.Model):
     # oldest and never collides with a real monthly period; base_fee is 0 and
     # total_due is the imported outstanding.
     is_opening_balance = models.BooleanField(default=False)
+    # True for a charges-only invoice covering additional charges that have no
+    # monthly-fee invoice to attach to (e.g. an imported patient's charges in a
+    # period already covered by the opening balance). base_fee is 0; total_due
+    # is the sum of those charges.
+    is_settlement = models.BooleanField(default=False)
 
     class Meta:
         # One invoice per billing period per admission

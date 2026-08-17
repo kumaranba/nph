@@ -70,3 +70,23 @@ which is **idempotent** (skips periods already invoiced). It is driven two ways:
 
 Local dev needs Redis plus two processes: `celery -A config worker` and
 `celery -A config beat` (exactly one beat instance).
+
+## Additional charges
+
+Additional charges (drugs, snacks, specialist…) are **billed the moment they're
+added** — `create_charge` calls `BillingService.bill_charge`, which:
+
+1. **Tops up the charge's monthly invoice** (recomputes `total_due =
+   base_fee + period charges`). If that invoice was already PAID, it reopens to
+   PARTIAL — the patient now owes the charge.
+2. For a period **covered by the opening balance** (imported patients), bills
+   the charge on a **charges-only settlement invoice** (`Invoice.is_settlement`,
+   `base_fee=0`) so it isn't stranded.
+3. At **discharge**, `sweep_unbilled_charges` bills anything still unreflected —
+   the last chance, since no invoices are generated after discharge.
+
+Rules: a charge's `charge_date` can't be in the future; `delete_charge` reverses
+the top-up and is blocked once the invoice is PAID. The account statement
+**itemizes** each charge as its own debit line (fee line + one line per charge).
+`python manage.py bill_pending_charges` (idempotent) sweeps historical stranded
+charges.

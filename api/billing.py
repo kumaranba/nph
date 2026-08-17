@@ -266,6 +266,98 @@ class BillingService:
             - cls.amount_paid(invoice)
         )
 
+    # -------------------------------------------------------- additional charges
+    @classmethod
+    def recompute_invoice_total(cls, invoice: Invoice) -> Invoice:
+        """Recompute an invoice's ``total_due`` from its fee plus the charges in
+        its period, then its status. Used when a charge is added/removed after
+        the invoice already exists. The opening-balance invoice is fixed and is
+        never recomputed."""
+        if invoice.is_opening_balance:
+            return invoice
+        charges = (
+            AdditionalCharge.objects.filter(
+                admission=invoice.admission,
+                charge_date__gte=invoice.billing_period_start,
+                charge_date__lte=invoice.billing_period_end,
+            ).aggregate(total=Sum("amount"))["total"]
+            or Decimal("0")
+        )
+        invoice.total_due = invoice.base_fee + charges
+        invoice.save(update_fields=["total_due"])
+        cls.recompute_status(invoice)
+        return invoice
+
+    @classmethod
+    @transaction.atomic
+    def bill_charge(cls, charge) -> Invoice:
+        """Ensure ``charge`` is reflected on an invoice, immediately.
+
+        - A billable monthly period: top up (or generate) that period's invoice.
+        - A period already covered by the opening balance (imported patients):
+          bill it on a charges-only ``is_settlement`` invoice for that period.
+
+        Idempotent — safe to re-run for the same charge (recompute is a no-op if
+        nothing changed).
+        """
+        admission = charge.admission
+        start, end = cls._period_for(admission.admission_date, charge.charge_date)
+        covered = (
+            admission.opening_balance_as_of is not None
+            and start <= admission.opening_balance_as_of
+        )
+
+        if not covered:
+            invoice = admission.invoices.filter(
+                billing_period_start=start, billing_period_end=end,
+                is_settlement=False,
+            ).first()
+            if invoice is not None:
+                return cls.recompute_invoice_total(invoice)
+            # No invoice yet for this (billable) period — generate it; the new
+            # invoice's total already includes this charge.
+            return cls.generate_invoice_for_admission(
+                admission.id, as_of=charge.charge_date
+            )
+
+        # Covered period: charges-only settlement invoice for that period.
+        settlement = admission.invoices.filter(
+            billing_period_start=start, billing_period_end=end,
+            is_settlement=True,
+        ).first()
+        if settlement is not None:
+            return cls.recompute_invoice_total(settlement)
+
+        fee = cls._ensure_active_fee(admission)
+        charges = (
+            AdditionalCharge.objects.filter(
+                admission=admission,
+                charge_date__gte=start, charge_date__lte=end,
+            ).aggregate(total=Sum("amount"))["total"]
+            or Decimal("0")
+        )
+        settlement = Invoice.objects.create(
+            admission=admission,
+            fee=fee,
+            billing_period_start=start,
+            billing_period_end=end,
+            base_fee=Decimal("0"),
+            total_due=charges,
+            status=InvoiceStatus.UNPAID,
+            is_settlement=True,
+        )
+        cls.apply_credit(admission)
+        settlement.refresh_from_db()
+        return settlement
+
+    @classmethod
+    def sweep_unbilled_charges(cls, admission) -> None:
+        """Ensure every one of the admission's additional charges is reflected
+        on an invoice. Idempotent; used at discharge as a safety net."""
+        charges = AdditionalCharge.objects.filter(admission=admission)
+        for charge in charges:
+            cls.bill_charge(charge)
+
     # ------------------------------------------------------ pending-dues report
     @classmethod
     def total_pending_dues(cls, admission) -> Decimal:
