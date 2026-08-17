@@ -300,6 +300,11 @@ def build_pending_dues(as_of: date = None) -> List['PendingDueItem']:
         if pending <= 0:
             continue
         patient = admission.patient
+        # The current active monthly fee (the Fee ledger is the source of
+        # truth; admission.monthly_fee is only the initial rate). Additional
+        # charges are NOT included here — they show under total pending dues.
+        active_fee = admission.active_fee
+        current_fees = active_fee.amount if active_fee else admission.monthly_fee
         items.append(
             PendingDueItem(
                 id=patient.id,
@@ -308,7 +313,7 @@ def build_pending_dues(as_of: date = None) -> List['PendingDueItem']:
                 gender=patient.gender or '',
                 room=admission.bed.room.name if admission.bed else None,
                 admission_date=admission.admission_date,
-                current_fees=BillingService.current_cycle_charge(admission, as_of),
+                current_fees=current_fees,
                 total_pending_dues=pending,
                 contact=patient.guardian_phone or '',
                 place=patient.place or '',

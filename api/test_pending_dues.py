@@ -82,19 +82,20 @@ def test_pending_dues_lists_active_debtors_highest_first(finance_client, dues_da
     assert top["admissionDate"] == "2025-03-03"
 
 
-def test_current_fees_includes_current_period_charges(finance_client, db):
+def test_current_fees_is_the_active_monthly_fee(finance_client, db):
     _, admission = _patient_with_dues("Withcharge", Gender.MALE, 9500, 13500)
     recorder = User.objects.create_user(
         email="r@nph.test", password="secret123", role=UserRole.FINANCE
     )
-    # A charge dated inside the current (Aug) period lifts the current fees.
+    # Current fees is the active monthly fee only — additional charges do NOT
+    # lift it (they show under total pending dues instead).
     AdditionalCharge.objects.create(
         admission=admission, category="DRUGS", amount=Decimal("500"),
         charge_date=date(2026, 8, 10), recorded_by=recorder,
     )
     rows = finance_client.execute(PENDING_DUES)["data"]["pendingDuesList"]
     row = next(r for r in rows if r["name"] == "Withcharge")
-    assert Decimal(row["currentFees"]) == Decimal("10000")  # 9500 + 500
+    assert Decimal(row["currentFees"]) == Decimal("9500")
 
 
 def test_nurse_cannot_access_pending_dues(nurse_client, dues_dataset):
