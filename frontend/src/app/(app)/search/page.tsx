@@ -22,6 +22,7 @@ import { getAccessToken } from "@/lib/auth";
 import { PATIENTS_BY_TAGS, SEARCH_PATIENTS } from "@/lib/graphql/operations";
 import { useDebounce } from "@/lib/use-debounce";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format-date";
 
 type SearchRow = {
   id: string;
@@ -203,7 +204,7 @@ export default function SearchPage() {
                         {row.room && row.bed
                           ? `${row.room} · ${row.bed}`
                           : "Not admitted"}
-                        {row.admissionDate ? ` · ${row.admissionDate}` : ""}
+                        {row.admissionDate ? ` · ${formatDate(row.admissionDate)}` : ""}
                       </div>
                       {row.tags.length > 0 ? (
                         <div className="mt-1.5 flex flex-wrap gap-1">

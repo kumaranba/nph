@@ -22,6 +22,7 @@ import {
 } from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
 import { FEES_DUE_LIST, ME, PENDING_DUES_LIST } from "@/lib/graphql/operations";
+import { formatDate } from "@/lib/format-date";
 
 // Pending-dues report PDF lives on the same origin as the GraphQL endpoint.
 const PDF_URL = (
@@ -245,7 +246,7 @@ export default function FeesDuePage() {
                         </div>
                       ) : null}
                       <div className="text-xs text-muted-foreground">
-                        {row.dueDate}
+                        {formatDate(row.dueDate)}
                       </div>
                     </div>
                   </button>
@@ -279,7 +280,7 @@ export default function FeesDuePage() {
                           {row.patientId}
                         </td>
                         <td className="py-2 pr-4">{row.room ?? "—"}</td>
-                        <td className="py-2 pr-4">{row.dueDate}</td>
+                        <td className="py-2 pr-4">{formatDate(row.dueDate)}</td>
                         <td className="py-2 pr-4">
                           {row.daysUntilDue === 0
                             ? "Today"
@@ -402,7 +403,7 @@ export default function FeesDuePage() {
                           {i + 1}
                         </td>
                         <td className="py-2 pr-4">{row.name}</td>
-                        <td className="py-2 pr-4">{row.admissionDate}</td>
+                        <td className="py-2 pr-4">{formatDate(row.admissionDate)}</td>
                         <td className="py-2 pr-4 text-right">
                           {money(row.currentFees)}
                         </td>

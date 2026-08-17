@@ -25,6 +25,7 @@ import {
   SEARCH_PATIENTS,
 } from "@/lib/graphql/operations";
 import { useDebounce } from "@/lib/use-debounce";
+import { formatDate } from "@/lib/format-date";
 
 type SearchRow = { id: string; patientId: string; name: string };
 type ActiveFee = { id: string; amount: string; effectiveFrom: string };
@@ -198,9 +199,9 @@ export default function ChangeFeePage() {
                   <p className="text-sm text-muted-foreground">
                     Current fee{" "}
                     {admission.activeFee
-                      ? `${money(admission.activeFee.amount)} (from ${
+                      ? `${money(admission.activeFee.amount)} (from ${formatDate(
                           admission.activeFee.effectiveFrom
-                        })`
+                        )})`
                       : "—"}
                   </p>
                 ) : (
@@ -358,7 +359,7 @@ export default function ChangeFeePage() {
                         )}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        Effective {f.effectiveFrom} · {f.createdBy?.email ?? "system"}
+                        Effective {formatDate(f.effectiveFrom)} · {f.createdBy?.email ?? "system"}
                       </div>
                       {f.reason ? (
                         <div className="mt-1 text-xs text-muted-foreground">
@@ -385,7 +386,7 @@ export default function ChangeFeePage() {
                       {historyData!.feeHistory.map((f) => (
                         <tr key={f.id} className="border-b last:border-0">
                           <td className="py-2 pr-4">{money(f.amount)}</td>
-                          <td className="py-2 pr-4">{f.effectiveFrom}</td>
+                          <td className="py-2 pr-4">{formatDate(f.effectiveFrom)}</td>
                           <td className="py-2 pr-4">
                             {f.isActive ? (
                               <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">

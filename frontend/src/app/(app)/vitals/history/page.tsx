@@ -27,6 +27,7 @@ import {
   VITAL_HISTORY,
 } from "@/lib/graphql/operations";
 import { useDebounce } from "@/lib/use-debounce";
+import { formatDateTime } from "@/lib/format-date";
 
 type SearchRow = { id: string; patientId: string; name: string };
 
@@ -305,7 +306,7 @@ export default function VitalsHistoryPage() {
                       {readings.map((r) => (
                         <tr key={r.id} className="border-b last:border-0">
                           <td className="py-2 pr-4 whitespace-nowrap">
-                            {fmt(r.recordedAt)}
+                            {formatDateTime(r.recordedAt)}
                           </td>
                           <td className="py-2 pr-4">{r.session}</td>
                           {shownVitals.map((v) => {
