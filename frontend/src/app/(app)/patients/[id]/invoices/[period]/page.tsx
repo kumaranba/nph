@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { getAccessToken } from "@/lib/auth";
 import { INVOICE, ME } from "@/lib/graphql/operations";
+import { formatDate } from "@/lib/format-date";
 
 type Charge = {
   id: string;
@@ -123,7 +124,7 @@ export default function InvoiceDetailPage() {
               <CardTitle>{invoice.admission.patient.name}</CardTitle>
               <CardDescription>
                 {invoice.admission.patient.patientId} ·{" "}
-                {invoice.billingPeriodStart} → {invoice.billingPeriodEnd}
+                {formatDate(invoice.billingPeriodStart)} → {formatDate(invoice.billingPeriodEnd)}
               </CardDescription>
             </div>
             <span
@@ -160,7 +161,7 @@ export default function InvoiceDetailPage() {
                       ) : null}
                       <span className="text-muted-foreground">
                         {" "}
-                        ({c.chargeDate})
+                        ({formatDate(c.chargeDate)})
                       </span>
                     </td>
                     <td className="py-2 text-right">{money(c.amount)}</td>
@@ -210,7 +211,7 @@ export default function InvoiceDetailPage() {
                 <tbody>
                   {invoice.payments.map((p) => (
                     <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-2">{p.paidOn}</td>
+                      <td className="py-2">{formatDate(p.paidOn)}</td>
                       <td className="py-2 text-right">{money(p.amount)}</td>
                     </tr>
                   ))}

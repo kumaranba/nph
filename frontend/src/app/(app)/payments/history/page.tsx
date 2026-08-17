@@ -21,6 +21,7 @@ import {
 } from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
 import { ME, PAYMENT_RECEIPTS } from "@/lib/graphql/operations";
+import { formatDate } from "@/lib/format-date";
 
 type Receipt = {
   id: string;
@@ -182,7 +183,7 @@ export default function PaymentsHistoryPage() {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.id} className="border-b last:border-0">
-                        <td className="py-2 pr-4 whitespace-nowrap">{r.paidOn}</td>
+                        <td className="py-2 pr-4 whitespace-nowrap">{formatDate(r.paidOn)}</td>
                         <td className="py-2 pr-4">
                           <button
                             type="button"

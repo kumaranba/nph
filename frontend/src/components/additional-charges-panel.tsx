@@ -18,6 +18,7 @@ import {
   DELETE_CHARGE,
   PATIENT,
 } from "@/lib/graphql/operations";
+import { formatDate } from "@/lib/format-date";
 
 export type Charge = {
   id: string;
@@ -125,7 +126,7 @@ export function AdditionalChargesPanel({
             <tbody>
               {charges.map((c) => (
                 <tr key={c.id} className="border-b last:border-0">
-                  <td className="py-2 pr-4">{c.chargeDate}</td>
+                  <td className="py-2 pr-4">{formatDate(c.chargeDate)}</td>
                   <td className="py-2 pr-4">{c.category}</td>
                   <td className="py-2 pr-4 text-muted-foreground">
                     {c.description || "—"}

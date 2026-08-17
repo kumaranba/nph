@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { QueryError, TableSkeleton } from "@/components/query-states";
 import { getAccessToken } from "@/lib/auth";
 import { ACCOUNT_STATEMENT, ME } from "@/lib/graphql/operations";
+import { formatDate } from "@/lib/format-date";
 
 type Line = {
   date: string;
@@ -190,7 +191,7 @@ export default function AccountStatementPage() {
                   </tr>
                   {s.lines.map((ln, i) => (
                     <tr key={i} className="border-b last:border-0">
-                      <td className="py-2 pr-4 whitespace-nowrap">{ln.date}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap">{formatDate(ln.date)}</td>
                       <td className="py-2 pr-4">{ln.description}</td>
                       <td className="py-2 pr-4 text-right">
                         {Number(ln.debit) ? money(ln.debit) : "—"}

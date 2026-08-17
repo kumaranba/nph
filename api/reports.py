@@ -23,7 +23,7 @@ def _rupee(amount) -> str:
 
 
 def _fmt_date(d: date) -> str:
-    return d.strftime("%d-%b-%Y")
+    return d.strftime("%d-%m-%Y")
 
 
 _HEADERS = [
