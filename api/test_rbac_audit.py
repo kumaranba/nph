@@ -12,7 +12,7 @@ public by design.
 """
 import pytest
 
-ALL = {"ADMIN", "FINANCE", "NURSE"}
+ALL = {"ADMIN", "FINANCE", "NURSE", "PRO"}
 
 # name, document, allowed_roles
 OPERATIONS = [
@@ -30,6 +30,8 @@ OPERATIONS = [
     # --- Queries: ADMIN only ----------------------------------------------
     ("users", "{ users { id } }", {"ADMIN"}),
     ("systemSettings", "{ systemSettings { feeDueWarningDays } }", {"ADMIN"}),
+    # --- Queries: ADMIN + PRO (PRM) ---------------------------------------
+    ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
     # --- Queries: ADMIN + FINANCE -----------------------------------------
     ("invoices", "{ invoices { id } }", {"ADMIN", "FINANCE"}),
     ("payments", "{ payments { id } }", {"ADMIN", "FINANCE"}),
@@ -111,19 +113,36 @@ OPERATIONS = [
         ' bpDiastolic: 80, pulse: 70, temperature: "98.6", spo2: 98) { id } }',
         {"ADMIN", "NURSE"},
     ),
+    # --- Mutations: PRO only (PRM) ----------------------------------------
+    (
+        "createInquiry",
+        'mutation { createInquiry(data: {name: "x", source: PHONE}) { id } }',
+        {"PRO"},
+    ),
+    (
+        "updateInquiryStatus",
+        'mutation { updateInquiryStatus(inquiryId: "999999", status: CLOSED) { id } }',
+        {"PRO"},
+    ),
+    (
+        "linkInquiryToPatient",
+        'mutation { linkInquiryToPatient(inquiryId: "999999", patientId: "1") { id } }',
+        {"PRO"},
+    ),
 ]
 
 
 @pytest.fixture
-def clients(admin_client, finance_client, nurse_client):
+def clients(admin_client, finance_client, nurse_client, pro_client):
     return {
         "ADMIN": admin_client,
         "FINANCE": finance_client,
         "NURSE": nurse_client,
+        "PRO": pro_client,
     }
 
 
-@pytest.mark.parametrize("role", ["ADMIN", "FINANCE", "NURSE"])
+@pytest.mark.parametrize("role", ["ADMIN", "FINANCE", "NURSE", "PRO"])
 @pytest.mark.parametrize(
     "name, document, allowed",
     OPERATIONS,

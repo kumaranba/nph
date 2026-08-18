@@ -17,15 +17,17 @@ from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
-    FoodPreference, Gender, Invoice, InvoiceStatus, Patient, Payment,
-    PaymentAccount, PaymentReceipt, Room, SystemSetting, Tag, TagCategory,
-    User, UserRole, VitalReading, VitalsThreshold,
+    FoodPreference, Gender, Inquiry, InquirySource, InquiryStatus, Invoice,
+    InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt, Room,
+    SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
+    VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
-    AdditionalChargeType, AdmissionType, BedType, FeeType, InvoiceType,
-    PatientType, PaymentAccountType, PaymentReceiptType, PaymentType, RoomType,
-    TagType, UserType, VitalReadingType, VitalsThresholdType,
+    AdditionalChargeType, AdmissionType, BedType, FeeType, InquiryType,
+    InvoiceType, PatientType, PaymentAccountType, PaymentReceiptType,
+    PaymentType, RoomType, TagType, UserType, VitalReadingType,
+    VitalsThresholdType,
 )
 
 
@@ -39,6 +41,7 @@ class UserRoleEnum(Enum):
     ADMIN = 'ADMIN'
     FINANCE = 'FINANCE'
     NURSE = 'NURSE'
+    PRO = 'PRO'
 
 
 @strawberry.enum
@@ -64,6 +67,25 @@ class FoodPreferenceEnum(Enum):
     """GraphQL enum for Patient.food_preference (mirrors models.FoodPreference)."""
     VEG = 'VEG'
     NON_VEG = 'NON_VEG'
+
+
+@strawberry.enum
+class InquirySourceEnum(Enum):
+    """GraphQL enum for Inquiry.source (mirrors models.InquirySource)."""
+    WHATSAPP = 'WHATSAPP'
+    PHONE = 'PHONE'
+    WALKIN = 'WALKIN'
+    WEB = 'WEB'
+    OP_IMPORT = 'OP_IMPORT'
+
+
+@strawberry.enum
+class InquiryStatusEnum(Enum):
+    """GraphQL enum for Inquiry.status (mirrors models.InquiryStatus)."""
+    NEW = 'NEW'
+    FOLLOWED_UP = 'FOLLOWED_UP'
+    CONVERTED = 'CONVERTED'
+    CLOSED = 'CLOSED'
 
 
 @strawberry.enum
@@ -181,6 +203,16 @@ class UpdatePatientInput:
     is_alive: Optional[bool] = strawberry.UNSET
     date_of_expiry: Optional[date] = strawberry.UNSET
     aadhar_number: Optional[str] = strawberry.UNSET
+
+
+@strawberry.input
+class CreateInquiryInput:
+    """A new prospective-patient inquiry. Only name and source are required;
+    the rest are optional. Status always starts NEW."""
+    name: str
+    source: InquirySourceEnum
+    phone: Optional[str] = ""
+    notes: Optional[str] = ""
 
 
 # Number of days before an invoice's period end that we flag it "due soon".
@@ -782,6 +814,25 @@ class Query:
                 )
             )
         return items
+
+    # --- PRM: inquiries (PRO manages, ADMIN views) -------------------------
+    # Inquiries, newest first, optionally filtered by status and/or a
+    # case-insensitive substring of name or phone. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def inquiries(
+        self,
+        info: Info,
+        status: Optional[InquiryStatusEnum] = None,
+        search: Optional[str] = None,
+    ) -> List[InquiryType]:
+        qs = Inquiry.objects.select_related('patient', 'created_by')
+        if status is not None:
+            qs = qs.filter(status=status.value)
+        term = (search or '').strip()
+        if term:
+            qs = qs.filter(Q(name__icontains=term) | Q(phone__icontains=term))
+        return qs.order_by('-created_at', '-id')
 
     # --- ADMIN + NURSE (clinical data) -------------------------------------
     @strawberry.field
@@ -1673,6 +1724,62 @@ class Mutation:
             user.is_active = False
             user.save(update_fields=['is_active'])
         return user
+
+    # --- PRM: inquiry writes (PRO only; ADMIN is view-only) ----------------
+    # Log a new inquiry. Starts NEW, stamped with the creating PRO. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def create_inquiry(self, info: Info, data: CreateInquiryInput) -> InquiryType:
+        name = (data.name or '').strip()
+        if not name:
+            raise GraphQLError('Inquiry name is required.')
+        return Inquiry.objects.create(
+            name=name,
+            phone=(data.phone or '').strip(),
+            source=data.source.value,
+            notes=(data.notes or '').strip(),
+            status=InquiryStatus.NEW,
+            created_by=info.context.request.user,
+        )
+
+    # Move an inquiry to a new status (e.g. NEW → FOLLOWED_UP → CLOSED). PRO
+    # only. Use link_inquiry_to_patient to convert — that also sets the FK.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def update_inquiry_status(
+        self, info: Info, inquiry_id: strawberry.ID, status: InquiryStatusEnum
+    ) -> InquiryType:
+        try:
+            inquiry = Inquiry.objects.get(pk=inquiry_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Inquiry not found.')
+        if status == InquiryStatusEnum.CONVERTED and inquiry.patient_id is None:
+            raise GraphQLError(
+                'Link the inquiry to a patient to mark it converted.'
+            )
+        inquiry.status = status.value
+        inquiry.save(update_fields=['status', 'updated_at'])
+        return inquiry
+
+    # Convert an inquiry: attach the resulting patient and mark it CONVERTED.
+    # PRO only. Idempotent target — re-linking to the same patient is a no-op.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def link_inquiry_to_patient(
+        self, info: Info, inquiry_id: strawberry.ID, patient_id: strawberry.ID
+    ) -> InquiryType:
+        try:
+            inquiry = Inquiry.objects.get(pk=inquiry_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Inquiry not found.')
+        try:
+            patient = Patient.objects.get(pk=patient_id)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
+        inquiry.patient = patient
+        inquiry.status = InquiryStatus.CONVERTED
+        inquiry.save(update_fields=['patient', 'status', 'updated_at'])
+        return inquiry
 
 
 schema = strawberry.Schema(

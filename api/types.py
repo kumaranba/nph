@@ -296,3 +296,29 @@ class VitalsThresholdType:
     vital_type: auto
     below_threshold: auto
     above_threshold: auto
+
+
+@strawberry_django.type(models.Inquiry)
+class InquiryType:
+    id: auto
+    name: auto
+    phone: auto
+    source: auto
+    status: auto
+    notes: auto
+    patient: Optional[PatientType]
+    created_by: Optional[UserType]
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry_django.type(models.FollowUp)
+class FollowUpType:
+    id: auto
+    patient: PatientType
+    admission: Optional[AdmissionType]
+    note: auto
+    follow_up_date: auto
+    is_done: auto
+    created_by: Optional[UserType]
+    created_at: auto

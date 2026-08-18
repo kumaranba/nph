@@ -42,10 +42,10 @@ type MeResult = { me: { id: string; role: string } };
 type CreateForm = {
   email: string;
   password: string;
-  role: "ADMIN" | "FINANCE" | "NURSE";
+  role: "ADMIN" | "FINANCE" | "NURSE" | "PRO";
 };
 
-const ROLES = ["ADMIN", "FINANCE", "NURSE"] as const;
+const ROLES = ["ADMIN", "FINANCE", "NURSE", "PRO"] as const;
 
 export default function UsersPage() {
   const router = useRouter();

@@ -90,6 +90,11 @@ def nurse_client(make_role_client) -> GraphQLClient:
 
 
 @pytest.fixture
+def pro_client(make_role_client) -> GraphQLClient:
+    return make_role_client(UserRole.PRO, email="pro@nph.test")
+
+
+@pytest.fixture
 def anonymous_client() -> GraphQLClient:
     """Unauthenticated GraphQL client (no bearer header)."""
     return GraphQLClient()
