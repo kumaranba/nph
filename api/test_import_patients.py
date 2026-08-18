@@ -16,7 +16,7 @@ from api.models import (
 )
 
 HEADER = (
-    "name,age,diagnosis,admitting_doctor,room,bed,"
+    "name,diagnosis,admitting_doctor,room,bed,"
     "admission_date,monthly_fee,guardian_name,guardian_phone"
 )
 
@@ -44,7 +44,7 @@ def _run(path, **kwargs):
 def test_valid_row_creates_patient_admission_invoice(tmp_path, ward):
     path = _write_csv(
         tmp_path,
-        "Jane Doe,72,Pneumonia,Dr. Smith,Ward A,A1,2026-01-15,25000.00,John Doe,98765",
+        "Jane Doe,Pneumonia,Dr. Smith,Ward A,A1,2026-01-15,25000.00,John Doe,98765",
     )
     output = _run(path)
 
@@ -63,7 +63,7 @@ def test_valid_row_creates_patient_admission_invoice(tmp_path, ward):
 def test_optional_guardian_fields_may_be_blank(tmp_path, ward):
     path = _write_csv(
         tmp_path,
-        "Ravi Kumar,65,Post-op,Dr. Rao,Ward A,A2,2026-01-16,25000.00,,",
+        "Ravi Kumar,Post-op,Dr. Rao,Ward A,A2,2026-01-16,25000.00,,",
     )
     _run(path)
     p = Patient.objects.get(name="Ravi Kumar")
@@ -75,15 +75,13 @@ def test_optional_guardian_fields_may_be_blank(tmp_path, ward):
     "row, expected_error",
     [
         # missing name
-        (",72,Pneumonia,Dr. S,Ward A,A1,2026-01-15,25000,,", "name is required"),
-        # bad age
-        ("A,x,Pneumonia,Dr. S,Ward A,A1,2026-01-15,25000,,", "age must be a whole number"),
+        (",Pneumonia,Dr. S,Ward A,A1,2026-01-15,25000,,", "name is required"),
         # bad fee
-        ("A,72,Pneumonia,Dr. S,Ward A,A1,2026-01-15,abc,,", "monthly_fee must be a number"),
+        ("A,Pneumonia,Dr. S,Ward A,A1,2026-01-15,abc,,", "monthly_fee must be a number"),
         # bad date
-        ("A,72,Pneumonia,Dr. S,Ward A,A1,15-01-2026,25000,,", "admission_date must be YYYY-MM-DD"),
+        ("A,Pneumonia,Dr. S,Ward A,A1,15-01-2026,25000,,", "admission_date must be YYYY-MM-DD"),
         # unknown bed
-        ("A,72,Pneumonia,Dr. S,Ward A,Z9,2026-01-15,25000,,", "not found"),
+        ("A,Pneumonia,Dr. S,Ward A,Z9,2026-01-15,25000,,", "not found"),
     ],
 )
 def test_invalid_row_is_reported_and_skipped(tmp_path, ward, row, expected_error):
@@ -98,8 +96,8 @@ def test_occupied_bed_rejected(tmp_path, ward):
     # First row takes A1; second row targeting A1 must be rejected.
     path = _write_csv(
         tmp_path,
-        "First,72,Dx,Dr. S,Ward A,A1,2026-01-15,25000,,",
-        "Second,60,Dx,Dr. S,Ward A,A1,2026-01-16,25000,,",
+        "First,Dx,Dr. S,Ward A,A1,2026-01-15,25000,,",
+        "Second,Dx,Dr. S,Ward A,A1,2026-01-16,25000,,",
     )
     output = _run(path)
     assert "Imported 1 patient" in output
@@ -110,9 +108,9 @@ def test_occupied_bed_rejected(tmp_path, ward):
 def test_partial_import_creates_valid_skips_invalid(tmp_path, ward):
     path = _write_csv(
         tmp_path,
-        "Good One,72,Dx,Dr. S,Ward A,A1,2026-01-15,25000,,",
+        "Good One,Dx,Dr. S,Ward A,A1,2026-01-15,25000,,",
         ",60,Dx,Dr. S,Ward A,A2,2026-01-16,25000,,",  # missing name
-        "Good Two,55,Dx,Dr. S,Ward A,A3,2026-01-17,25000,,",
+        "Good Two,Dx,Dr. S,Ward A,A3,2026-01-17,25000,,",
     )
     output = _run(path)
     assert "Imported 2 patient(s); 1 row(s) skipped" in output
@@ -122,7 +120,7 @@ def test_partial_import_creates_valid_skips_invalid(tmp_path, ward):
 def test_dry_run_creates_nothing(tmp_path, ward):
     path = _write_csv(
         tmp_path,
-        "Jane Doe,72,Pneumonia,Dr. Smith,Ward A,A1,2026-01-15,25000,,",
+        "Jane Doe,Pneumonia,Dr. Smith,Ward A,A1,2026-01-15,25000,,",
     )
     output = _run(path, dry_run=True)
     assert "Would import 1 patient" in output

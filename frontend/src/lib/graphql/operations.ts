@@ -162,8 +162,12 @@ export const PATIENT = gql`
       patientId
       name
       age
+      dateOfBirth
       gender
       diagnosis
+      foodPreference
+      isAlive
+      dateOfExpiry
       guardianName
       guardianPhone
       admittingDoctor
@@ -212,12 +216,16 @@ export const UPDATE_PATIENT = gql`
       id
       name
       age
+      dateOfBirth
       gender
       diagnosis
       admittingDoctor
       guardianName
       guardianPhone
       place
+      foodPreference
+      isAlive
+      dateOfExpiry
     }
   }
 `;

@@ -50,7 +50,7 @@ OPERATIONS = [
     # --- Mutations: ADMIN only --------------------------------------------
     (
         "createAdmission",
-        'mutation { createAdmission(input: {name: "x", age: 1, diagnosis: "d",'
+        'mutation { createAdmission(input: {name: "x", diagnosis: "d",'
         ' admittingDoctor: "dr", bedId: "1", admissionDate: "2026-01-01",'
         ' monthlyFee: "1"}) { id } }',
         {"ADMIN"},

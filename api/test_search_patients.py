@@ -44,7 +44,6 @@ def patient(db):
     bed = Bed.objects.create(room=room, label="A1", status=BedStatus.OCCUPIED)
     p = Patient.objects.create(
         name="Jane Doe",
-        age=72,
         diagnosis="Pneumonia",
         guardian_name="John Doe",
         guardian_phone="9876543210",

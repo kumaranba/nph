@@ -39,8 +39,9 @@ type CreateAdmissionResult = {
 // form; numeric/decimal coercion happens at submit time.
 type AdmissionForm = {
   name: string;
-  age: string;
+  dateOfBirth: string;
   gender: string;
+  foodPreference: string;
   diagnosis: string;
   admittingDoctor: string;
   bedId: string;
@@ -66,8 +67,9 @@ export default function NewAdmissionPage() {
   } = useForm<AdmissionForm>({
     defaultValues: {
       name: "",
-      age: "",
+      dateOfBirth: "",
       gender: "",
+      foodPreference: "",
       diagnosis: "",
       admittingDoctor: "",
       bedId: "",
@@ -98,8 +100,9 @@ export default function NewAdmissionPage() {
       variables: {
         input: {
           name: values.name,
-          age: values.age === "" ? null : Number(values.age),
+          dateOfBirth: values.dateOfBirth || null,
           gender: values.gender || undefined,
+          foodPreference: values.foodPreference || undefined,
           diagnosis: values.diagnosis,
           admittingDoctor: values.admittingDoctor,
           bedId: values.bedId,
@@ -137,21 +140,15 @@ export default function NewAdmissionPage() {
               ) : null}
             </div>
 
-            {/* Age + gender + admission date */}
+            {/* DOB + gender + admission date */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="age">Age (optional)</Label>
+                <Label htmlFor="dateOfBirth">Date of birth (optional)</Label>
                 <Input
-                  id="age"
-                  type="number"
-                  min={0}
-                  {...register("age", {
-                    min: { value: 0, message: "Age must be positive" },
-                  })}
+                  id="dateOfBirth"
+                  type="date"
+                  {...register("dateOfBirth")}
                 />
-                {errors.age ? (
-                  <p className="text-sm text-red-600">{errors.age.message}</p>
-                ) : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="gender">Gender</Label>

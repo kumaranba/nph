@@ -6,11 +6,24 @@ import strawberry
 import strawberry_django
 from django.db.models import Sum
 from strawberry import auto
+from strawberry.permission import BasePermission
+from strawberry.types import Info
 from . import models
 from .models import InvoiceStatus
 
 # Invoice statuses that count as money still owed.
 _OUTSTANDING_STATUSES = [InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+
+
+class IsAdmin(BasePermission):
+    """Field-level guard: only ADMIN may read the annotated field. A non-Admin
+    gets a permission error (the field resolves to null with the error), not a
+    silent empty value."""
+    message = "Aadhar data is restricted to Admin."
+
+    def has_permission(self, source, info: Info, **kwargs) -> bool:
+        user = getattr(info.context.request, 'user', None)
+        return getattr(user, 'role', None) == models.UserRole.ADMIN
 
 
 @strawberry_django.type(models.User)
@@ -56,15 +69,30 @@ class PatientType:
     id: auto
     patient_id: auto
     name: auto
-    age: auto
+    date_of_birth: auto
     gender: auto
     diagnosis: auto
+    food_preference: auto
+    is_alive: auto
+    date_of_expiry: auto
     guardian_name: auto
     guardian_phone: auto
     admitting_doctor: auto
     place: auto
     created_at: auto
     admissions: list['AdmissionType']
+
+    # Age in whole years, computed from date_of_birth; None (UI shows "–") when
+    # DOB is unset. There is no stored age field any more.
+    @strawberry.field
+    def age(self) -> Optional[int]:
+        return self.age
+
+    # Aadhar number is ADMIN-only at the API layer: a non-Admin that queries it
+    # directly gets a permission error, not a null/empty value.
+    @strawberry.field(permission_classes=[IsAdmin])
+    def aadhar_number(self) -> Optional[str]:
+        return self.aadhar_number or ''
 
     # Tags applied to this patient, alphabetical.
     @strawberry.field

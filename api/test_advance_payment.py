@@ -36,7 +36,7 @@ def patient_admission(db):
     room = Room.objects.create(name="Ward", capacity=2)
     bed = Bed.objects.create(room=room, label="A1", status=BedStatus.OCCUPIED)
     patient = Patient.objects.create(
-        name="Jane Doe", age=72, diagnosis="Pneumonia", admitting_doctor="Dr. X"
+        name="Jane Doe", diagnosis="Pneumonia", admitting_doctor="Dr. X"
     )
     admission = Admission.objects.create(
         patient=patient,

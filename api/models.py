@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -93,6 +94,11 @@ class Gender(models.TextChoices):
     OTHER = 'OTHER', 'Other'
 
 
+class FoodPreference(models.TextChoices):
+    VEG = 'VEG', 'Vegetarian'
+    NON_VEG = 'NON_VEG', 'Non-vegetarian'
+
+
 class TagCategory(models.TextChoices):
     BEHAVIOUR = 'BEHAVIOUR', 'Behaviour'
     ILLNESS = 'ILLNESS', 'Illness'
@@ -145,9 +151,24 @@ class Patient(models.Model):
     """
     patient_id = models.CharField(max_length=20, unique=True, editable=False)
     name = models.CharField(max_length=255)
-    age = models.PositiveIntegerField(null=True, blank=True)
+    # Deprecated: the stored age is retired in favour of the computed `age`
+    # property (from date_of_birth). Kept one release as a rollback reference;
+    # nothing reads it. Dropped next release.
+    legacy_age = models.PositiveIntegerField(null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=10, choices=Gender.choices, blank=True)
     diagnosis = models.TextField()
+    food_preference = models.CharField(
+        max_length=10, choices=FoodPreference.choices, blank=True
+    )
+    # Aadhar number is 12 digits. ADMIN-only at the API layer (see PatientType).
+    aadhar_number = models.CharField(
+        max_length=12, blank=True,
+        validators=[RegexValidator(r'^\d{12}$', 'Aadhar number must be 12 digits.')],
+    )
+    # Alive by default; date_of_expiry is set only when is_alive is False.
+    is_alive = models.BooleanField(default=True)
+    date_of_expiry = models.DateField(null=True, blank=True)
     guardian_name = models.CharField(max_length=255, blank=True)
     guardian_phone = models.CharField(max_length=20, blank=True)
     admitting_doctor = models.CharField(max_length=255)
@@ -155,6 +176,18 @@ class Patient(models.Model):
     place = models.CharField(max_length=255, blank=True)
     tags = models.ManyToManyField('Tag', related_name='patients', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def age(self):
+        """Age in whole years from date_of_birth, or None if it's unset.
+        The UI shows '–' for None (never 0)."""
+        dob = self.date_of_birth
+        if not dob:
+            return None
+        today = timezone.now().date()
+        return today.year - dob.year - (
+            (today.month, today.day) < (dob.month, dob.day)
+        )
 
     def save(self, *args, **kwargs):
         if not self.patient_id:

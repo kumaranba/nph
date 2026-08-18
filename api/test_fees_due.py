@@ -45,7 +45,7 @@ def _admit(room, *, name, anchor_day, label, fee="20000.00"):
     today), so its next cycle date is that day-of-month in June."""
     bed = Bed.objects.create(room=room, label=label, status=BedStatus.OCCUPIED)
     patient = Patient.objects.create(
-        name=name, age=70, diagnosis="dx", admitting_doctor="Dr. X"
+        name=name, diagnosis="dx", admitting_doctor="Dr. X"
     )
     return Admission.objects.create(
         patient=patient,

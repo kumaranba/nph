@@ -5,7 +5,7 @@ first Invoice for that admission's billing period. Rows are validated and
 imported independently — a bad row is reported and skipped, the rest proceed.
 
 CSV columns (header required):
-    name, age, diagnosis, admitting_doctor, room, bed, admission_date,
+    name, diagnosis, admitting_doctor, room, bed, admission_date,
     monthly_fee, guardian_name (optional), guardian_phone (optional)
 
     admission_date: YYYY-MM-DD
@@ -26,7 +26,6 @@ from api.models import Admission, AdmissionStatus, Bed, BedStatus, Patient
 
 REQUIRED_COLUMNS = [
     "name",
-    "age",
     "diagnosis",
     "admitting_doctor",
     "room",
@@ -101,15 +100,6 @@ class Command(BaseCommand):
             if not value(col):
                 errors.append(f"{col} is required")
 
-        age = None
-        if value("age"):
-            try:
-                age = int(value("age"))
-                if age < 0:
-                    errors.append("age must be non-negative")
-            except ValueError:
-                errors.append("age must be a whole number")
-
         monthly_fee = None
         if value("monthly_fee"):
             try:
@@ -155,7 +145,6 @@ class Command(BaseCommand):
 
                 patient = Patient.objects.create(
                     name=value("name"),
-                    age=age,
                     diagnosis=value("diagnosis"),
                     guardian_name=value("guardian_name"),
                     guardian_phone=value("guardian_phone"),

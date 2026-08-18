@@ -50,7 +50,6 @@ from api.models import (
     Room,
 )
 
-PLACEHOLDER_AGE = 0
 PLACEHOLDER_DIAGNOSIS = "Unspecified"
 PLACEHOLDER_DOCTOR = "Unspecified"
 
@@ -233,7 +232,6 @@ class Command(BaseCommand):
             with transaction.atomic():
                 patient = Patient.objects.create(
                     name=name,
-                    age=PLACEHOLDER_AGE,
                     gender=gender,
                     diagnosis=PLACEHOLDER_DIAGNOSIS,
                     guardian_name="",

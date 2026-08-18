@@ -12,24 +12,30 @@ import { PATIENT, UPDATE_PATIENT } from "@/lib/graphql/operations";
 export type EditablePatient = {
   id: string;
   name: string;
-  age: number | null;
+  dateOfBirth: string | null;
   gender: string;
   diagnosis: string;
   admittingDoctor: string;
   guardianName: string;
   guardianPhone: string;
   place: string;
+  foodPreference: string;
+  isAlive: boolean;
+  dateOfExpiry: string | null;
 };
 
 type EditForm = {
   name: string;
-  age: string;
+  dateOfBirth: string;
   gender: string;
   diagnosis: string;
   admittingDoctor: string;
   guardianName: string;
   guardianPhone: string;
   place: string;
+  foodPreference: string;
+  isAlive: boolean;
+  dateOfExpiry: string;
 };
 
 export function EditPatientModal({
@@ -42,19 +48,24 @@ export function EditPatientModal({
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<EditForm>({
     defaultValues: {
       name: patient.name,
-      age: patient.age === null ? "" : String(patient.age),
+      dateOfBirth: patient.dateOfBirth ?? "",
       gender: patient.gender ?? "",
       diagnosis: patient.diagnosis,
       admittingDoctor: patient.admittingDoctor,
       guardianName: patient.guardianName,
       guardianPhone: patient.guardianPhone,
       place: patient.place,
+      foodPreference: patient.foodPreference ?? "",
+      isAlive: patient.isAlive,
+      dateOfExpiry: patient.dateOfExpiry ?? "",
     },
   });
+  const isAlive = watch("isAlive");
 
   const [update, { loading, error }] = useMutation(UPDATE_PATIENT, {
     refetchQueries: [{ query: PATIENT, variables: { pk: patient.id } }],
@@ -76,13 +87,16 @@ export function EditPatientModal({
         patientId: patient.id,
         input: {
           name: values.name,
-          age: values.age === "" ? null : Number(values.age),
+          dateOfBirth: values.dateOfBirth || null,
           gender: values.gender || null,
           diagnosis: values.diagnosis,
           admittingDoctor: values.admittingDoctor,
           guardianName: values.guardianName,
           guardianPhone: values.guardianPhone,
           place: values.place,
+          foodPreference: values.foodPreference || null,
+          isAlive: values.isAlive,
+          dateOfExpiry: values.isAlive ? null : values.dateOfExpiry || null,
         },
       },
     });
@@ -115,18 +129,8 @@ export function EditPatientModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-age">Age (optional)</Label>
-              <Input
-                id="edit-age"
-                type="number"
-                min={0}
-                {...register("age", {
-                  min: { value: 0, message: "Age must be positive" },
-                })}
-              />
-              {errors.age ? (
-                <p className="text-sm text-red-600">{errors.age.message}</p>
-              ) : null}
+              <Label htmlFor="edit-dob">Date of birth</Label>
+              <Input id="edit-dob" type="date" {...register("dateOfBirth")} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-gender">Gender</Label>
@@ -141,6 +145,42 @@ export function EditPatientModal({
                 <option value="OTHER">Other</option>
               </select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-food">Food preference</Label>
+            <select
+              id="edit-food"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              {...register("foodPreference")}
+            >
+              <option value="">Unspecified</option>
+              <option value="VEG">Vegetarian</option>
+              <option value="NON_VEG">Non-vegetarian</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              id="edit-alive"
+              type="checkbox"
+              className="h-4 w-4"
+              {...register("isAlive")}
+            />
+            <Label htmlFor="edit-alive">Alive</Label>
+            {!isAlive ? (
+              <div className="ml-auto flex items-center gap-2">
+                <Label htmlFor="edit-expiry" className="text-sm">
+                  Date of expiry
+                </Label>
+                <Input
+                  id="edit-expiry"
+                  type="date"
+                  className="w-40"
+                  {...register("dateOfExpiry")}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-2">
