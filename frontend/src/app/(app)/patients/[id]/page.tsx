@@ -11,6 +11,7 @@ import {
 import { DischargeModal } from "@/components/discharge-modal";
 import { EditPatientModal } from "@/components/edit-patient-modal";
 import { PatientDocumentsPanel } from "@/components/patient-documents-panel";
+import { ReadmitModal } from "@/components/readmit-modal";
 import { formatDate } from "@/lib/format-date";
 import { PatientTagsPanel } from "@/components/patient-tags-panel";
 import { type Tag } from "@/components/tag-input";
@@ -68,6 +69,7 @@ export default function PatientProfilePage() {
   const params = useParams<{ id: string }>();
   const [showDischarge, setShowDischarge] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showReadmit, setShowReadmit] = useState(false);
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -268,13 +270,18 @@ export default function PatientProfilePage() {
             </p>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => router.push("/admissions/new")}
-          >
-            New admission
-          </Button>
+          {/* Admit this existing patient: "New Admission" if they have no
+              admission history, "Re Admission" after a discharge, nothing while
+              an admission is active. ADMIN only. */}
+          {patient && canEditPatient && !activeAdmission ? (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowReadmit(true)}
+            >
+              {patient.admissions.length > 0 ? "Re Admission" : "New Admission"}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -325,6 +332,15 @@ export default function PatientProfilePage() {
             dateOfExpiry: patient.dateOfExpiry,
           }}
           onClose={() => setShowEdit(false)}
+        />
+      ) : null}
+
+      {showReadmit && patient ? (
+        <ReadmitModal
+          patientId={patient.id}
+          patientName={patient.name}
+          title={patient.admissions.length > 0 ? "Re Admission" : "New Admission"}
+          onClose={() => setShowReadmit(false)}
         />
       ) : null}
     </main>
