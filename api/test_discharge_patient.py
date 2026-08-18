@@ -46,7 +46,6 @@ def admission(db):
     bed = Bed.objects.create(room=room, label="T1", status=BedStatus.OCCUPIED)
     patient = Patient.objects.create(
         name="Jane Doe",
-        age=72,
         diagnosis="Pneumonia",
         admitting_doctor="Dr. Smith",
     )

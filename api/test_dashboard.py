@@ -45,7 +45,7 @@ def seeded(db):
     )
 
     patient = Patient.objects.create(
-        name="Jane Doe", age=72, diagnosis="Pneumonia", admitting_doctor="Dr. X"
+        name="Jane Doe", diagnosis="Pneumonia", admitting_doctor="Dr. X"
     )
     admission = Admission.objects.create(
         patient=patient, bed=b1, admission_date=date(2026, 1, 15),

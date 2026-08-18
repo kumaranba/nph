@@ -37,7 +37,7 @@ def _input(bed, **overrides):
     """Build a valid CreateAdmissionInput dict, with optional overrides."""
     data = {
         "name": "Jane Doe",
-        "age": 72,
+        "dateOfBirth": "1954-01-01",
         "diagnosis": "Community-acquired pneumonia",
         "admittingDoctor": "Dr. Smith",
         "bedId": str(bed.id),
@@ -86,9 +86,16 @@ def test_gender_is_optional_and_defaults_blank(admin_client, vacant_bed):
     assert Patient.objects.get().gender == ""
 
 
-def test_age_is_optional(admin_client, vacant_bed):
+def test_age_is_computed_from_dob(admin_client, vacant_bed):
+    result = admin_client.execute(CREATE_ADMISSION, {"input": _input(vacant_bed)})
+    assert result.get("errors") is None
+    # DOB 1954-01-01 → a positive whole-year age.
+    assert result["data"]["createAdmission"]["patient"]["age"] >= 70
+
+
+def test_age_none_without_dob(admin_client, vacant_bed):
     payload = _input(vacant_bed)
-    del payload["age"]  # age is now optional on the input.
+    del payload["dateOfBirth"]  # DOB is optional; age is None without it.
     result = admin_client.execute(CREATE_ADMISSION, {"input": payload})
     assert result.get("errors") is None
     assert result["data"]["createAdmission"]["patient"]["age"] is None

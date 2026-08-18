@@ -47,7 +47,7 @@ query ByTags($tags: [String!]!, $match: TagMatchEnum) {
 @pytest.fixture
 def patient(db):
     return Patient.objects.create(
-        name="Jane Doe", age=40, diagnosis="Dx", admitting_doctor="Dr. S"
+        name="Jane Doe", diagnosis="Dx", admitting_doctor="Dr. S"
     )
 
 
@@ -113,8 +113,8 @@ def test_remove_tag_detaches_but_keeps_tag_row(nurse_client, patient):
 # --- Suggestions ------------------------------------------------------------
 
 def test_tag_suggestions_typeahead_and_ranking(admin_client, db):
-    p1 = Patient.objects.create(name="A", age=1, diagnosis="d", admitting_doctor="x")
-    p2 = Patient.objects.create(name="B", age=1, diagnosis="d", admitting_doctor="x")
+    p1 = Patient.objects.create(name="A", diagnosis="d", admitting_doctor="x")
+    p2 = Patient.objects.create(name="B", diagnosis="d", admitting_doctor="x")
     admin_client.execute(ADD_TAGS, {"patientId": str(p1.id), "tags": ["Aggressive"]})
     admin_client.execute(ADD_TAGS, {"patientId": str(p2.id), "tags": ["Aggressive"]})
     admin_client.execute(ADD_TAGS, {"patientId": str(p1.id), "tags": ["Agitated"]})
@@ -127,7 +127,7 @@ def test_tag_suggestions_typeahead_and_ranking(admin_client, db):
 
 
 def test_tag_suggestions_filtered_by_category(admin_client, db):
-    p = Patient.objects.create(name="A", age=1, diagnosis="d", admitting_doctor="x")
+    p = Patient.objects.create(name="A", diagnosis="d", admitting_doctor="x")
     admin_client.execute(ADD_TAGS, {"patientId": str(p.id), "tags": ["Aggressive"], "category": "BEHAVIOUR"})
     admin_client.execute(ADD_TAGS, {"patientId": str(p.id), "tags": ["Diabetes"], "category": "ILLNESS"})
 
@@ -139,8 +139,8 @@ def test_tag_suggestions_filtered_by_category(admin_client, db):
 # --- Search by tag ----------------------------------------------------------
 
 def test_patients_by_tags_any_vs_all(admin_client, db):
-    p1 = Patient.objects.create(name="Alpha", age=1, diagnosis="d", admitting_doctor="x")
-    p2 = Patient.objects.create(name="Beta", age=1, diagnosis="d", admitting_doctor="x")
+    p1 = Patient.objects.create(name="Alpha", diagnosis="d", admitting_doctor="x")
+    p2 = Patient.objects.create(name="Beta", diagnosis="d", admitting_doctor="x")
     admin_client.execute(ADD_TAGS, {"patientId": str(p1.id), "tags": ["Aggressive", "Diabetes"]})
     admin_client.execute(ADD_TAGS, {"patientId": str(p2.id), "tags": ["Aggressive"]})
 

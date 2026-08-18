@@ -33,7 +33,7 @@ ACCOUNTS = "{ paymentAccounts { name isActive } }"
 @pytest.fixture
 def admission(db):
     patient = Patient.objects.create(
-        name="Jane", age=60, diagnosis="d", admitting_doctor="Dr",
+        name="Jane", diagnosis="d", admitting_doctor="Dr",
     )
     admission = Admission.objects.create(
         patient=patient, admission_date=date(2026, 1, 15),

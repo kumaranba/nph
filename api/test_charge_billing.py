@@ -33,7 +33,7 @@ query($pid: ID!) { accountStatement(patientId: $pid) {
 
 def _admission(opening_as_of=None):
     patient = Patient.objects.create(
-        name="Jane", age=60, diagnosis="d", admitting_doctor="Dr",
+        name="Jane", diagnosis="d", admitting_doctor="Dr",
     )
     return Admission.objects.create(
         patient=patient, admission_date=date(2026, 1, 15),

@@ -36,7 +36,7 @@ def _patient_with_dues(
     admission_date=date(2025, 3, 3),
 ):
     patient = Patient.objects.create(
-        name=name, age=40, gender=gender, diagnosis="d",
+        name=name, gender=gender, diagnosis="d",
         admitting_doctor="Dr", place=place, guardian_phone=contact,
     )
     admission = Admission.objects.create(

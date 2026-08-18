@@ -31,7 +31,7 @@ def _admission(admission_date, *, monthly_fee="25000.00", label="A1"):
     room = Room.objects.create(name="Ward", capacity=5)
     bed = Bed.objects.create(room=room, label=label, status=BedStatus.OCCUPIED)
     patient = Patient.objects.create(
-        name="Jane Doe", age=72, diagnosis="Pneumonia", admitting_doctor="Dr. X"
+        name="Jane Doe", diagnosis="Pneumonia", admitting_doctor="Dr. X"
     )
     return Admission.objects.create(
         patient=patient,

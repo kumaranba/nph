@@ -10,6 +10,7 @@ import {
 } from "@/components/additional-charges-panel";
 import { DischargeModal } from "@/components/discharge-modal";
 import { EditPatientModal } from "@/components/edit-patient-modal";
+import { formatDate } from "@/lib/format-date";
 import { PatientTagsPanel } from "@/components/patient-tags-panel";
 import { type Tag } from "@/components/tag-input";
 import { LinesSkeleton, QueryError } from "@/components/query-states";
@@ -42,8 +43,12 @@ type PatientResult = {
     patientId: string;
     name: string;
     age: number | null;
+    dateOfBirth: string | null;
     gender: string;
     diagnosis: string;
+    foodPreference: string;
+    isAlive: boolean;
+    dateOfExpiry: string | null;
     guardianName: string;
     guardianPhone: string;
     admittingDoctor: string;
@@ -143,6 +148,32 @@ export default function PatientProfilePage() {
                 <Row
                   label="Age"
                   value={patient.age === null ? "—" : String(patient.age)}
+                />
+                <Row
+                  label="Date of birth"
+                  value={patient.dateOfBirth ? formatDate(patient.dateOfBirth) : "—"}
+                />
+                <Row
+                  label="Food preference"
+                  value={
+                    patient.foodPreference === "VEG"
+                      ? "Vegetarian"
+                      : patient.foodPreference === "NON_VEG"
+                        ? "Non-vegetarian"
+                        : "—"
+                  }
+                />
+                <Row
+                  label="Life status"
+                  value={
+                    patient.isAlive
+                      ? "Alive"
+                      : `Deceased${
+                          patient.dateOfExpiry
+                            ? ` · ${formatDate(patient.dateOfExpiry)}`
+                            : ""
+                        }`
+                  }
                 />
                 <Row label="Diagnosis" value={patient.diagnosis} />
                 <Row label="Admitting doctor" value={patient.admittingDoctor} />
@@ -272,13 +303,16 @@ export default function PatientProfilePage() {
           patient={{
             id: patient.id,
             name: patient.name,
-            age: patient.age,
+            dateOfBirth: patient.dateOfBirth,
             gender: patient.gender,
             diagnosis: patient.diagnosis,
             admittingDoctor: patient.admittingDoctor,
             guardianName: patient.guardianName,
             guardianPhone: patient.guardianPhone,
             place: patient.place,
+            foodPreference: patient.foodPreference,
+            isAlive: patient.isAlive,
+            dateOfExpiry: patient.dateOfExpiry,
           }}
           onClose={() => setShowEdit(false)}
         />

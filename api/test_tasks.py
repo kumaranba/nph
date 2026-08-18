@@ -10,7 +10,7 @@ from api.tasks import generate_due_invoices
 
 def _active_admission():
     patient = Patient.objects.create(
-        name="Due Patient", age=50, diagnosis="d", admitting_doctor="Dr",
+        name="Due Patient", diagnosis="d", admitting_doctor="Dr",
     )
     # Admitted well over a month ago, so the current cycle is due today.
     return Admission.objects.create(

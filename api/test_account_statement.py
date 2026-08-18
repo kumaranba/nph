@@ -30,7 +30,7 @@ query Statement($pid: ID!, $from: Date, $to: Date) {
 @pytest.fixture
 def ledger(db):
     patient = Patient.objects.create(
-        name="Jane", age=60, diagnosis="d", admitting_doctor="Dr",
+        name="Jane", diagnosis="d", admitting_doctor="Dr",
     )
     admission = Admission.objects.create(
         patient=patient, admission_date=date(2026, 1, 15),
@@ -78,7 +78,7 @@ def test_statement_date_range_carries_opening_balance(finance_client, ledger):
 
 def test_advance_credit_shows_negative_balance(finance_client, db):
     patient = Patient.objects.create(
-        name="Rich", age=50, diagnosis="d", admitting_doctor="Dr",
+        name="Rich", diagnosis="d", admitting_doctor="Dr",
     )
     admission = Admission.objects.create(
         patient=patient, admission_date=date(2026, 1, 15),

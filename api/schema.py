@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
@@ -15,10 +16,10 @@ from . import auth, dashboard, vitals
 from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
-    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee, Gender,
-    Invoice, InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
-    Room, SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
-    VitalsThreshold,
+    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
+    FoodPreference, Gender, Invoice, InvoiceStatus, Patient, Payment,
+    PaymentAccount, PaymentReceipt, Room, SystemSetting, Tag, TagCategory,
+    User, UserRole, VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
@@ -56,6 +57,13 @@ class GenderEnum(Enum):
     MALE = 'MALE'
     FEMALE = 'FEMALE'
     OTHER = 'OTHER'
+
+
+@strawberry.enum
+class FoodPreferenceEnum(Enum):
+    """GraphQL enum for Patient.food_preference (mirrors models.FoodPreference)."""
+    VEG = 'VEG'
+    NON_VEG = 'NON_VEG'
 
 
 @strawberry.enum
@@ -148,10 +156,11 @@ class CreateAdmissionInput:
     admission_date: date
     monthly_fee: Decimal
     # Optional patient details
-    age: Optional[int] = None
+    date_of_birth: Optional[date] = None
     guardian_name: Optional[str] = ""
     guardian_phone: Optional[str] = ""
     gender: Optional[GenderEnum] = None
+    food_preference: Optional[FoodPreferenceEnum] = None
 
 
 @strawberry.input
@@ -161,13 +170,17 @@ class UpdatePatientInput:
     be explicitly cleared by sending null.
     """
     name: Optional[str] = strawberry.UNSET
-    age: Optional[int] = strawberry.UNSET
+    date_of_birth: Optional[date] = strawberry.UNSET
     gender: Optional[GenderEnum] = strawberry.UNSET
     diagnosis: Optional[str] = strawberry.UNSET
     admitting_doctor: Optional[str] = strawberry.UNSET
     guardian_name: Optional[str] = strawberry.UNSET
     guardian_phone: Optional[str] = strawberry.UNSET
     place: Optional[str] = strawberry.UNSET
+    food_preference: Optional[FoodPreferenceEnum] = strawberry.UNSET
+    is_alive: Optional[bool] = strawberry.UNSET
+    date_of_expiry: Optional[date] = strawberry.UNSET
+    aadhar_number: Optional[str] = strawberry.UNSET
 
 
 # Number of days before an invoice's period end that we flag it "due soon".
@@ -1266,8 +1279,6 @@ class Mutation:
     def create_admission(self, info: Info, input: CreateAdmissionInput) -> AdmissionType:
         if not input.name.strip():
             raise GraphQLError('Patient name is required.')
-        if input.age is not None and input.age < 0:
-            raise GraphQLError('Age must be a positive number.')
         if input.monthly_fee < 0:
             raise GraphQLError('Monthly fee cannot be negative.')
 
@@ -1283,9 +1294,10 @@ class Mutation:
 
             patient = Patient.objects.create(
                 name=input.name.strip(),
-                age=input.age,
+                date_of_birth=input.date_of_birth,
                 gender=input.gender.value if input.gender else '',
                 diagnosis=input.diagnosis,
+                food_preference=input.food_preference.value if input.food_preference else '',
                 guardian_name=input.guardian_name or '',
                 guardian_phone=input.guardian_phone or '',
                 admitting_doctor=input.admitting_doctor,
@@ -1337,11 +1349,9 @@ class Mutation:
                 raise GraphQLError('Patient name cannot be empty.')
             patient.name = input.name.strip()
             update_fields.append('name')
-        if input.age is not UNSET:
-            if input.age is not None and input.age < 0:
-                raise GraphQLError('Age must be a positive number.')
-            patient.age = input.age
-            update_fields.append('age')
+        if input.date_of_birth is not UNSET:
+            patient.date_of_birth = input.date_of_birth
+            update_fields.append('date_of_birth')
         if input.gender is not UNSET:
             patient.gender = input.gender.value if input.gender else ''
             update_fields.append('gender')
@@ -1360,6 +1370,24 @@ class Mutation:
         if input.place is not UNSET:
             patient.place = input.place or ''
             update_fields.append('place')
+        if input.food_preference is not UNSET:
+            patient.food_preference = (
+                input.food_preference.value if input.food_preference else ''
+            )
+            update_fields.append('food_preference')
+        if input.is_alive is not UNSET:
+            patient.is_alive = bool(input.is_alive)
+            update_fields.append('is_alive')
+        if input.date_of_expiry is not UNSET:
+            patient.date_of_expiry = input.date_of_expiry
+            update_fields.append('date_of_expiry')
+        # Aadhar is ADMIN-only to write (matching read RBAC on PatientType).
+        if input.aadhar_number is not UNSET:
+            aadhar = (input.aadhar_number or '').strip()
+            if aadhar and not re.fullmatch(r'\d{12}', aadhar):
+                raise GraphQLError('Aadhar number must be 12 digits.')
+            patient.aadhar_number = aadhar
+            update_fields.append('aadhar_number')
 
         if update_fields:
             patient.save(update_fields=update_fields)

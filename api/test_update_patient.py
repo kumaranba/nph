@@ -1,4 +1,6 @@
 """Tests for the updatePatient mutation (ADMIN-only profile editing)."""
+from datetime import date
+
 import pytest
 
 from api.models import Gender, Patient
@@ -7,7 +9,7 @@ UPDATE = """
 mutation Update($patientId: ID!, $input: UpdatePatientInput!) {
   updatePatient(patientId: $patientId, input: $input) {
     id name age gender diagnosis admittingDoctor
-    guardianName guardianPhone place
+    guardianName guardianPhone place foodPreference isAlive dateOfExpiry
   }
 }
 """
@@ -16,9 +18,9 @@ mutation Update($patientId: ID!, $input: UpdatePatientInput!) {
 @pytest.fixture
 def patient(db):
     return Patient.objects.create(
-        name="Jane Doe", age=72, gender=Gender.FEMALE, diagnosis="Pneumonia",
-        admitting_doctor="Dr. X", guardian_name="John", guardian_phone="999",
-        place="Trichy",
+        name="Jane Doe", date_of_birth=date(1954, 1, 1), gender=Gender.FEMALE,
+        diagnosis="Pneumonia", admitting_doctor="Dr. X", guardian_name="John",
+        guardian_phone="999", place="Trichy",
     )
 
 
@@ -39,18 +41,33 @@ def test_admin_updates_only_provided_fields(admin_client, patient):
     assert patient.place == "Chennai"
 
 
-def test_age_and_gender_can_be_cleared(admin_client, patient):
+def test_dob_and_gender_can_be_cleared(admin_client, patient):
     result = admin_client.execute(UPDATE, {
         "patientId": str(patient.id),
-        "input": {"age": None, "gender": None},
+        "input": {"dateOfBirth": None, "gender": None},
     })
     assert result.get("errors") is None
     data = result["data"]["updatePatient"]
-    assert data["age"] is None
+    assert data["age"] is None  # no DOB → computed age is None
     assert data["gender"] == ""
     patient.refresh_from_db()
-    assert patient.age is None
+    assert patient.date_of_birth is None
     assert patient.gender == ""
+
+
+def test_demographics_and_expiry_update(admin_client, patient):
+    result = admin_client.execute(UPDATE, {
+        "patientId": str(patient.id),
+        "input": {
+            "foodPreference": "VEG", "isAlive": False,
+            "dateOfExpiry": "2026-08-01",
+        },
+    })
+    assert result.get("errors") is None
+    data = result["data"]["updatePatient"]
+    assert data["foodPreference"] == "VEG"
+    assert data["isAlive"] is False
+    assert data["dateOfExpiry"] == "2026-08-01"
 
 
 def test_empty_name_is_rejected(admin_client, patient):
