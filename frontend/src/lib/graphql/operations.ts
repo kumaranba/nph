@@ -154,6 +154,26 @@ export const CREATE_ADMISSION = gql`
   }
 `;
 
+// Admit an existing patient (new admission / re-admission after discharge).
+export const READMIT_PATIENT = gql`
+  mutation ReadmitPatient(
+    $patientId: ID!
+    $admissionDate: Date!
+    $monthlyFee: Decimal!
+    $bedId: ID
+  ) {
+    readmitPatient(
+      patientId: $patientId
+      admissionDate: $admissionDate
+      monthlyFee: $monthlyFee
+      bedId: $bedId
+    ) {
+      id
+      status
+    }
+  }
+`;
+
 // A single patient (with admissions), used by the patient profile page.
 export const PATIENT = gql`
   query Patient($pk: ID!) {

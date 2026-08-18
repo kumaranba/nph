@@ -1329,6 +1329,62 @@ class Mutation:
 
         return admission
 
+    # Admit an EXISTING patient (new admission for a zero-admission patient, or a
+    # re-admission after discharge). ADMIN only. Creates a new Admission with its
+    # own independent Fee (Fee invariant #8) — the prior admission's Fee history
+    # is untouched. Rejected if the patient already has an active admission.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def readmit_patient(
+        self,
+        info: Info,
+        patient_id: strawberry.ID,
+        admission_date: date,
+        monthly_fee: Decimal,
+        bed_id: Optional[strawberry.ID] = None,
+    ) -> AdmissionType:
+        if monthly_fee < 0:
+            raise GraphQLError('Monthly fee cannot be negative.')
+        try:
+            patient = Patient.objects.get(pk=patient_id)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
+
+        with transaction.atomic():
+            if patient.admissions.filter(status=AdmissionStatus.ACTIVE).exists():
+                raise GraphQLError('Patient already has an active admission.')
+
+            bed = None
+            if bed_id is not None:
+                try:
+                    bed = Bed.objects.select_for_update().get(pk=bed_id)
+                except Bed.DoesNotExist:
+                    raise GraphQLError('Bed not found.')
+                if bed.status == BedStatus.OCCUPIED:
+                    raise GraphQLError('Bed is already occupied.')
+
+            admission = Admission.objects.create(
+                patient=patient,
+                bed=bed,
+                admission_date=admission_date,
+                monthly_fee=monthly_fee,
+                status=AdmissionStatus.ACTIVE,
+            )
+            Fee.objects.create(
+                admission=admission,
+                amount=monthly_fee,
+                effective_from=admission_date,
+                is_active=True,
+                reason='Initial fee',
+                created_by=info.context.request.user,
+            )
+            if bed is not None:
+                bed.status = BedStatus.OCCUPIED
+                bed.save(update_fields=['status'])
+            BillingService.generate_all_due_for_admission(admission.id)
+
+        return admission
+
     # Edit a patient's profile fields. ADMIN only. Only the fields provided are
     # changed; age/gender may be cleared by sending null.
     @strawberry.mutation
