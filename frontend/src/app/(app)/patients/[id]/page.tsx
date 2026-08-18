@@ -10,6 +10,7 @@ import {
 } from "@/components/additional-charges-panel";
 import { DischargeModal } from "@/components/discharge-modal";
 import { EditPatientModal } from "@/components/edit-patient-modal";
+import { PatientDocumentsPanel } from "@/components/patient-documents-panel";
 import { formatDate } from "@/lib/format-date";
 import { PatientTagsPanel } from "@/components/patient-tags-panel";
 import { type Tag } from "@/components/tag-input";
@@ -49,6 +50,7 @@ type PatientResult = {
     foodPreference: string;
     isAlive: boolean;
     dateOfExpiry: string | null;
+    photoUrl: string | null;
     guardianName: string;
     guardianPhone: string;
     admittingDoctor: string;
@@ -275,6 +277,14 @@ export default function PatientProfilePage() {
           </Button>
         </CardContent>
       </Card>
+
+      {patient ? (
+        <PatientDocumentsPanel
+          patientId={patient.id}
+          photoUrl={patient.photoUrl}
+          isAdmin={canEditPatient}
+        />
+      ) : null}
 
       {patient && chargesAdmission ? (
         <AdditionalChargesPanel

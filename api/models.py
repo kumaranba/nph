@@ -166,6 +166,10 @@ class Patient(models.Model):
         max_length=12, blank=True,
         validators=[RegexValidator(r'^\d{12}$', 'Aadhar number must be 12 digits.')],
     )
+    # Files live on the app-server filesystem (MEDIA_ROOT). The Aadhar scan is
+    # ADMIN-only at the API layer, like aadhar_number; the photo is not.
+    photo = models.ImageField(upload_to='patient_photos/', null=True, blank=True)
+    aadhar_scan = models.FileField(upload_to='aadhar_scans/', null=True, blank=True)
     # Alive by default; date_of_expiry is set only when is_alive is False.
     is_alive = models.BooleanField(default=True)
     date_of_expiry = models.DateField(null=True, blank=True)

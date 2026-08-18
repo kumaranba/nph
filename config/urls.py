@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 from django.views.decorators.csrf import csrf_exempt
@@ -7,6 +9,8 @@ from api.views import (
     JWTGraphQLView,
     account_statement_pdf_view,
     fees_due_pdf_view,
+    patient_aadhar_scan_upload_view,
+    patient_photo_upload_view,
     receipt_pdf_view,
 )
 
@@ -22,4 +26,14 @@ urlpatterns = [
     # Patient account statement (PDF). Bearer-auth, ADMIN + FINANCE.
     path('reports/statement/<int:patient_id>.pdf',
          csrf_exempt(account_statement_pdf_view)),
+    # Patient document uploads (multipart). Bearer-auth, ADMIN.
+    path('patients/<int:patient_id>/photo',
+         csrf_exempt(patient_photo_upload_view)),
+    path('patients/<int:patient_id>/aadhar-scan',
+         csrf_exempt(patient_aadhar_scan_upload_view)),
 ]
+
+# Serve uploaded media from MEDIA_ROOT in development. In production, the web
+# server / reverse proxy serves MEDIA_URL directly.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

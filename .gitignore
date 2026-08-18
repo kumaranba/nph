@@ -26,3 +26,6 @@ playwright/.cache/
 *.swp
 .idea/
 .vscode/
+
+# Uploaded patient files (server filesystem)
+media/

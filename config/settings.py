@@ -129,6 +129,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Uploaded files (patient photos, Aadhar scans) live on the app-server
+# filesystem — per the Addendum decision, not object storage. This directory
+# needs its own backup coverage in production.
+MEDIA_URL = os.environ.get('MEDIA_URL', '/media/')
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
+# Reject uploads larger than this (bytes); enforced in the upload views too.
+MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_BYTES', str(5 * 1024 * 1024)))
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
