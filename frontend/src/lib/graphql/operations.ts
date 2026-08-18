@@ -121,6 +121,22 @@ export const PENDING_DUES_LIST = gql`
   }
 `;
 
+// Discharged admissions — optional tag filter, sorted by discharge date.
+export const DISCHARGED_LIST = gql`
+  query DischargedList($tag: String, $sortDesc: Boolean) {
+    dischargedList(tag: $tag, sortDesc: $sortDesc) {
+      id
+      patientId
+      name
+      admissionDate
+      dischargeDate
+      dischargeType
+      room
+      tags
+    }
+  }
+`;
+
 // Only vacant beds — used to populate the admission form's bed picker.
 export const VACANT_BEDS = gql`
   query VacantBeds {
