@@ -210,6 +210,20 @@ class PendingDueItem:
 
 
 @strawberry.type
+class DischargedPatientItem:
+    """A discharged admission, for the discharged-patient list (search by tag,
+    sort by discharge date)."""
+    id: strawberry.ID          # patient primary key (for navigation)
+    patient_id: str            # NPH-YYYY-NNNN code
+    name: str
+    admission_date: date
+    discharge_date: Optional[date]
+    discharge_type: str
+    room: Optional[str]
+    tags: List[str]
+
+
+@strawberry.type
 class FeeDueItem:
     """A patient with an upcoming billing cycle date, for the fees-due list."""
     id: strawberry.ID          # patient primary key (for navigation)
@@ -731,6 +745,43 @@ class Query:
     @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def pending_dues_list(self, info: Info) -> List[PendingDueItem]:
         return build_pending_dues()
+
+    # Discharged admissions, optionally filtered to patients carrying a given
+    # tag, sorted by discharge date (newest first by default). ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def discharged_list(
+        self, info: Info, tag: Optional[str] = None, sort_desc: bool = True
+    ) -> List[DischargedPatientItem]:
+        qs = (
+            Admission.objects.filter(status=AdmissionStatus.DISCHARGED)
+            .select_related('patient', 'bed__room')
+            .prefetch_related('patient__tags')
+        )
+        term = (tag or '').strip().lower()
+        if term:
+            qs = qs.filter(patient__tags__name=term).distinct()
+        order = '-discharge_date' if sort_desc else 'discharge_date'
+        qs = qs.order_by(order, '-id')
+
+        items: List[DischargedPatientItem] = []
+        for admission in qs:
+            patient = admission.patient
+            items.append(
+                DischargedPatientItem(
+                    id=patient.id,
+                    patient_id=patient.patient_id,
+                    name=patient.name,
+                    admission_date=admission.admission_date,
+                    discharge_date=admission.discharge_date,
+                    discharge_type=admission.discharge_type or '',
+                    room=admission.bed.room.name if admission.bed else None,
+                    tags=list(
+                        patient.tags.order_by('name').values_list('label', flat=True)
+                    ),
+                )
+            )
+        return items
 
     # --- ADMIN + NURSE (clinical data) -------------------------------------
     @strawberry.field

@@ -6,6 +6,7 @@ import {
   History,
   LayoutDashboard,
   Receipt,
+  UserMinus,
   Search,
   Settings,
   ShieldCheck,
@@ -33,6 +34,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Search", href: "/search", icon: Search },
       { label: "New admission", href: "/admissions/new", icon: UserPlus },
+      { label: "Discharged", href: "/discharged", icon: UserMinus },
     ],
   },
   {
