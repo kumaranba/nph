@@ -1,17 +1,20 @@
 "use client";
 
-import { useMutation } from "@apollo/client";
+import { useMutation, useQuery } from "@apollo/client";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { INVOICE, LOG_PAYMENT } from "@/lib/graphql/operations";
+import { INVOICE, LOG_PAYMENT, PAYMENT_ACCOUNTS } from "@/lib/graphql/operations";
+
+type Account = { id: string; name: string };
 
 type LogPaymentForm = {
   amount: string;
   paidOn: string;
+  accountId: string;
 };
 
 type Props = {
@@ -34,8 +37,14 @@ export function LogPaymentModal({
     defaultValues: {
       amount: "",
       paidOn: new Date().toISOString().slice(0, 10),
+      accountId: "",
     },
   });
+
+  const { data: accountsData } = useQuery<{ paymentAccounts: Account[] }>(
+    PAYMENT_ACCOUNTS
+  );
+  const accounts = accountsData?.paymentAccounts ?? [];
 
   const [logPayment, { loading, error }] = useMutation(LOG_PAYMENT, {
     refetchQueries: [{ query: INVOICE, variables: { patientId, period } }],
@@ -57,6 +66,7 @@ export function LogPaymentModal({
         invoiceId,
         amount: values.amount,
         paidOn: values.paidOn,
+        accountId: values.accountId || null,
       },
     });
   }
@@ -97,6 +107,24 @@ export function LogPaymentModal({
               type="date"
               {...register("paidOn", { required: true })}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="accountId">Payment done at</Label>
+            <select
+              id="accountId"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              defaultValue=""
+              {...register("accountId", { required: true })}
+            >
+              <option value="" disabled>
+                Select account
+              </option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {error ? (

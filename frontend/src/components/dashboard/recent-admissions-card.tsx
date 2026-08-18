@@ -7,7 +7,8 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { LinesSkeleton, QueryError, EmptyState } from "@/components/query-states";
 import { RECENT_ADMISSIONS } from "@/lib/graphql/dashboard-operations";
-import { initials, formatClock } from "@/components/dashboard/format";
+import { initials } from "@/components/dashboard/format";
+import { formatDate } from "@/lib/format-date";
 
 type Adm = {
   id: string;
@@ -79,7 +80,7 @@ export function RecentAdmissionsCard() {
                   </span>
                 ) : null}
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  {formatClock(a.admissionDate)}
+                  {formatDate(a.admissionDate)}
                 </div>
               </div>
             </div>

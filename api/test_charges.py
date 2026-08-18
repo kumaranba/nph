@@ -11,8 +11,12 @@ from api.models import (
     AdmissionStatus,
     Bed,
     BedStatus,
+    Invoice,
+    InvoiceStatus,
     Patient,
     Room,
+    User,
+    UserRole,
 )
 
 CREATE_CHARGE = """
@@ -132,16 +136,24 @@ def test_finance_can_delete_uninvoiced_charge(finance_client, admission):
     assert AdditionalCharge.objects.count() == 0
 
 
-def test_cannot_delete_charge_after_invoice_finalized(finance_client, admission):
+def test_cannot_delete_charge_after_invoice_paid(finance_client, admission):
     created = finance_client.execute(CREATE_CHARGE, _charge_vars(admission))
     charge_id = created["data"]["createCharge"]["id"]
 
-    # Finalize the invoice covering the charge's period.
-    BillingService.generate_invoice_for_admission(admission.id, as_of=date(2026, 1, 15))
+    # The charge auto-billed onto the period's invoice; pay it in full.
+    inv = Invoice.objects.get(admission=admission, is_settlement=False)
+    user = User.objects.create_user(
+        email="pay@nph.test", password="secret123", role=UserRole.FINANCE
+    )
+    BillingService.record_payment_for_admission(
+        admission, inv.total_due, Decimal("0"), date(2026, 1, 20), user
+    )
+    inv.refresh_from_db()
+    assert inv.status == InvoiceStatus.PAID
 
     result = finance_client.execute(DELETE_CHARGE, {"chargeId": charge_id})
     assert result["data"] is None
-    assert "already been invoiced" in result["errors"][0]["message"]
+    assert "already paid" in result["errors"][0]["message"].lower()
     assert AdditionalCharge.objects.count() == 1  # not deleted
 
 

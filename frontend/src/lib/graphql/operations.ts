@@ -423,8 +423,18 @@ export const INVOICE = gql`
 `;
 
 export const LOG_PAYMENT = gql`
-  mutation LogPayment($invoiceId: ID!, $amount: Decimal!, $paidOn: Date!) {
-    logPayment(invoiceId: $invoiceId, amount: $amount, paidOn: $paidOn) {
+  mutation LogPayment(
+    $invoiceId: ID!
+    $amount: Decimal!
+    $paidOn: Date!
+    $accountId: ID
+  ) {
+    logPayment(
+      invoiceId: $invoiceId
+      amount: $amount
+      paidOn: $paidOn
+      accountId: $accountId
+    ) {
       id
       status
       amountPaid
