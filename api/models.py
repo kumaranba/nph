@@ -12,6 +12,7 @@ class UserRole(models.TextChoices):
     ADMIN = 'ADMIN', 'Admin'
     FINANCE = 'FINANCE', 'Finance'
     NURSE = 'NURSE', 'Nurse'
+    PRO = 'PRO', 'Patient Relations Officer'
 
 
 class UserManager(BaseUserManager):
@@ -552,3 +553,77 @@ class SystemSetting(models.Model):
 
     def __str__(self):
         return f'System settings (fee_due_warning_days={self.fee_due_warning_days})'
+
+
+# ---------------------------------------------------------------------------
+# PRM — Inquiry & FollowUp (Patient Relationship Management)
+# ---------------------------------------------------------------------------
+
+class InquirySource(models.TextChoices):
+    WHATSAPP = 'WHATSAPP', 'WhatsApp'
+    PHONE = 'PHONE', 'Phone'
+    WALKIN = 'WALKIN', 'Walk-in'
+    WEB = 'WEB', 'Web'
+    OP_IMPORT = 'OP_IMPORT', 'OP list import'
+
+
+class InquiryStatus(models.TextChoices):
+    NEW = 'NEW', 'New'
+    FOLLOWED_UP = 'FOLLOWED_UP', 'Followed up'
+    CONVERTED = 'CONVERTED', 'Converted'
+    CLOSED = 'CLOSED', 'Closed'
+
+
+class Inquiry(models.Model):
+    """A prospective-patient inquiry, from any intake channel. Managed by the
+    PRO role; converted to a Patient by linking on admission."""
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=20, blank=True)
+    source = models.CharField(max_length=12, choices=InquirySource.choices)
+    status = models.CharField(
+        max_length=12, choices=InquiryStatus.choices, default=InquiryStatus.NEW
+    )
+    notes = models.TextField(blank=True)
+    # Set when the inquiry converts to a real patient.
+    patient = models.ForeignKey(
+        Patient, on_delete=models.SET_NULL, related_name='inquiries',
+        null=True, blank=True,
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='created_inquiries',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Inquiry #{self.pk} — {self.name} ({self.status})'
+
+
+class FollowUp(models.Model):
+    """A dated follow-up reminder for a patient (typically a discharged one).
+    Surfaced in the in-app bell when due. Separate from any notification log."""
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name='follow_ups'
+    )
+    admission = models.ForeignKey(
+        Admission, on_delete=models.SET_NULL, related_name='follow_ups',
+        null=True, blank=True,
+    )
+    note = models.TextField(blank=True)
+    follow_up_date = models.DateField()
+    is_done = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='created_follow_ups',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['follow_up_date', 'id']
+
+    def __str__(self):
+        return f'FollowUp #{self.pk} — {self.patient.name} on {self.follow_up_date}'
