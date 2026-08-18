@@ -168,6 +168,7 @@ export const PATIENT = gql`
       foodPreference
       isAlive
       dateOfExpiry
+      photoUrl
       guardianName
       guardianPhone
       admittingDoctor
@@ -206,6 +207,18 @@ export const PATIENT = gql`
           description
         }
       }
+    }
+  }
+`;
+
+// ADMIN-only fields (Aadhar). Kept out of the shared PATIENT query so a
+// non-admin viewing a profile doesn't hit the Aadhar permission error.
+export const PATIENT_AADHAR = gql`
+  query PatientAadhar($pk: ID!) {
+    patient(pk: $pk) {
+      id
+      aadharNumber
+      aadharScanUrl
     }
   }
 `;

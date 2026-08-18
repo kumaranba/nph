@@ -1,6 +1,7 @@
 import io
 from datetime import datetime
 
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.http import HttpResponse, JsonResponse
 from strawberry.django.views import GraphQLView
@@ -112,3 +113,48 @@ def account_statement_pdf_view(request, patient_id):
         f'attachment; filename="statement-{statement.patient_code}.pdf"'
     )
     return response
+
+
+# ---------------------------------------------------------------------------
+# Patient document uploads (photo, Aadhar scan)
+# ---------------------------------------------------------------------------
+
+_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+_SCAN_TYPES = _IMAGE_TYPES | {"application/pdf"}
+
+
+def _upload_patient_file(request, patient_id, field, allowed_types):
+    """Save an uploaded file onto ``patient.<field>``. ADMIN only (uploading
+    patient documents matches the ADMIN-only patient edit). Bearer-auth."""
+    user = get_user_from_request(request)
+    if user is None:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    if user.role != UserRole.ADMIN:
+        return JsonResponse({"error": "Permission denied."}, status=403)
+    try:
+        patient = Patient.objects.get(pk=patient_id)
+    except Patient.DoesNotExist:
+        return JsonResponse({"error": "Patient not found."}, status=404)
+
+    upload = request.FILES.get("file")
+    if upload is None:
+        return JsonResponse({"error": "No file uploaded (field 'file')."}, status=400)
+    if upload.size > settings.MAX_UPLOAD_BYTES:
+        return JsonResponse({"error": "File is too large."}, status=413)
+    if upload.content_type not in allowed_types:
+        return JsonResponse(
+            {"error": f"Unsupported file type: {upload.content_type}."}, status=415
+        )
+
+    getattr(patient, field).save(upload.name, upload, save=True)
+    return JsonResponse({"url": getattr(patient, field).url})
+
+
+def patient_photo_upload_view(request, patient_id):
+    """Upload/replace a patient photo (image). ADMIN. multipart field 'file'."""
+    return _upload_patient_file(request, patient_id, "photo", _IMAGE_TYPES)
+
+
+def patient_aadhar_scan_upload_view(request, patient_id):
+    """Upload/replace a patient's Aadhar scan (image or PDF). ADMIN."""
+    return _upload_patient_file(request, patient_id, "aadhar_scan", _SCAN_TYPES)

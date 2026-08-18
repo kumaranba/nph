@@ -94,6 +94,16 @@ class PatientType:
     def aadhar_number(self) -> Optional[str]:
         return self.aadhar_number or ''
 
+    # Patient photo URL (served from MEDIA), or None if no photo.
+    @strawberry.field
+    def photo_url(self) -> Optional[str]:
+        return self.photo.url if self.photo else None
+
+    # Aadhar scan URL — ADMIN-only, like the Aadhar number.
+    @strawberry.field(permission_classes=[IsAdmin])
+    def aadhar_scan_url(self) -> Optional[str]:
+        return self.aadhar_scan.url if self.aadhar_scan else None
+
     # Tags applied to this patient, alphabetical.
     @strawberry.field
     def tags(self) -> list['TagType']:
