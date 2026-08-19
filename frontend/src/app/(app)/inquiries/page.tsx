@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@apollo/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ImportOpListModal } from "@/components/import-op-list-modal";
 import { LinkInquiryModal } from "@/components/link-inquiry-modal";
 import { NewInquiryModal } from "@/components/new-inquiry-modal";
 import {
@@ -71,6 +72,7 @@ export default function InquiriesPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [linkTarget, setLinkTarget] = useState<Inquiry | null>(null);
 
   const hasToken = getAccessToken() !== null;
@@ -128,9 +130,18 @@ export default function InquiriesPage() {
               </CardDescription>
             </div>
             {canManage ? (
-              <Button size="sm" onClick={() => setShowNew(true)}>
-                New inquiry
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowImport(true)}
+                >
+                  Import OP list
+                </Button>
+                <Button size="sm" onClick={() => setShowNew(true)}>
+                  New inquiry
+                </Button>
+              </div>
             ) : null}
           </div>
         </CardHeader>
@@ -277,6 +288,12 @@ export default function InquiriesPage() {
       </Card>
 
       {showNew ? <NewInquiryModal onClose={() => setShowNew(false)} /> : null}
+      {showImport ? (
+        <ImportOpListModal
+          onClose={() => setShowImport(false)}
+          onImported={() => refetch()}
+        />
+      ) : null}
       {linkTarget ? (
         <LinkInquiryModal
           inquiryId={linkTarget.id}
