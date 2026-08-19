@@ -19,14 +19,14 @@ from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
     FollowUp, FoodPreference, Gender, Inquiry, InquirySource, InquiryStatus,
     Invoice, InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
-    Room, SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
-    VitalsThreshold,
+    Room, Staff, StaffDesignation, SystemSetting, Tag, TagCategory, User,
+    UserRole, VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
     AdditionalChargeType, AdmissionType, BedType, FeeType, FollowUpType,
     InquiryType, InvoiceType, PatientType, PaymentAccountType,
-    PaymentReceiptType, PaymentType, RoomType, TagType, UserType,
+    PaymentReceiptType, PaymentType, RoomType, StaffType, TagType, UserType,
     VitalReadingType, VitalsThresholdType,
 )
 
@@ -86,6 +86,18 @@ class InquiryStatusEnum(Enum):
     FOLLOWED_UP = 'FOLLOWED_UP'
     CONVERTED = 'CONVERTED'
     CLOSED = 'CLOSED'
+
+
+@strawberry.enum
+class StaffDesignationEnum(Enum):
+    """GraphQL enum for Staff.designation (mirrors models.StaffDesignation)."""
+    NURSE = 'NURSE'
+    ATTENDANT = 'ATTENDANT'
+    COOK = 'COOK'
+    CLEANER = 'CLEANER'
+    SECURITY = 'SECURITY'
+    ADMIN_STAFF = 'ADMIN_STAFF'
+    OTHER = 'OTHER'
 
 
 @strawberry.enum
@@ -213,6 +225,26 @@ class CreateInquiryInput:
     source: InquirySourceEnum
     phone: Optional[str] = ""
     notes: Optional[str] = ""
+
+
+@strawberry.input
+class CreateStaffInput:
+    """A new staff member. Only name is required; designation defaults to
+    OTHER. staff_code is auto-assigned."""
+    name: str
+    designation: Optional[StaffDesignationEnum] = None
+    phone: Optional[str] = ""
+    joined_on: Optional[date] = None
+
+
+@strawberry.input
+class UpdateStaffInput:
+    """Partial update of a staff member. Unset fields are left unchanged."""
+    name: Optional[str] = strawberry.UNSET
+    designation: Optional[StaffDesignationEnum] = strawberry.UNSET
+    phone: Optional[str] = strawberry.UNSET
+    joined_on: Optional[date] = strawberry.UNSET
+    is_active: Optional[bool] = strawberry.UNSET
 
 
 @strawberry.input
@@ -624,6 +656,32 @@ class Query:
     @require_roles(UserRole.ADMIN)
     def system_settings(self, info: Info) -> SystemSettingsType:
         return _system_settings()
+
+    # Staff registry, name order. Active only by default; pass
+    # include_inactive to see deactivated staff too. Optionally filter by
+    # designation or a name/code/phone substring. ADMIN only.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN)
+    def staff_list(
+        self,
+        info: Info,
+        include_inactive: bool = False,
+        designation: Optional[StaffDesignationEnum] = None,
+        search: Optional[str] = None,
+    ) -> List[StaffType]:
+        qs = Staff.objects.select_related('user')
+        if not include_inactive:
+            qs = qs.filter(is_active=True)
+        if designation is not None:
+            qs = qs.filter(designation=designation.value)
+        term = (search or '').strip()
+        if term:
+            qs = qs.filter(
+                Q(name__icontains=term)
+                | Q(staff_code__icontains=term)
+                | Q(phone__icontains=term)
+            )
+        return qs.order_by('name', 'id')
 
     # --- ADMIN + FINANCE (financial data) ----------------------------------
     @strawberry.field
@@ -1769,6 +1827,59 @@ class Mutation:
             user.is_active = False
             user.save(update_fields=['is_active'])
         return user
+
+    # --- Staff registry (ADMIN only) --------------------------------------
+    # Add a staff member. staff_code is auto-assigned. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def create_staff(self, info: Info, data: CreateStaffInput) -> StaffType:
+        name = (data.name or '').strip()
+        if not name:
+            raise GraphQLError('Staff name is required.')
+        return Staff.objects.create(
+            name=name,
+            designation=(
+                data.designation.value if data.designation is not None
+                else StaffDesignation.OTHER
+            ),
+            phone=(data.phone or '').strip(),
+            joined_on=data.joined_on,
+        )
+
+    # Edit a staff member (partial). Unset fields are unchanged. Use is_active
+    # to deactivate/reactivate — staff rows are never deleted. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def update_staff(
+        self, info: Info, staff_id: strawberry.ID, data: UpdateStaffInput
+    ) -> StaffType:
+        try:
+            staff = Staff.objects.get(pk=staff_id)
+        except Staff.DoesNotExist:
+            raise GraphQLError('Staff not found.')
+
+        fields = []
+        if data.name is not strawberry.UNSET:
+            name = (data.name or '').strip()
+            if not name:
+                raise GraphQLError('Staff name cannot be blank.')
+            staff.name = name
+            fields.append('name')
+        if data.designation is not strawberry.UNSET and data.designation is not None:
+            staff.designation = data.designation.value
+            fields.append('designation')
+        if data.phone is not strawberry.UNSET:
+            staff.phone = (data.phone or '').strip()
+            fields.append('phone')
+        if data.joined_on is not strawberry.UNSET:
+            staff.joined_on = data.joined_on
+            fields.append('joined_on')
+        if data.is_active is not strawberry.UNSET and data.is_active is not None:
+            staff.is_active = data.is_active
+            fields.append('is_active')
+        if fields:
+            staff.save(update_fields=fields)
+        return staff
 
     # --- PRM: inquiry writes (PRO only; ADMIN is view-only) ----------------
     # Log a new inquiry. Starts NEW, stamped with the creating PRO. PRO only.

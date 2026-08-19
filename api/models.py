@@ -627,3 +627,64 @@ class FollowUp(models.Model):
 
     def __str__(self):
         return f'FollowUp #{self.pk} — {self.patient.name} on {self.follow_up_date}'
+
+
+# ---------------------------------------------------------------------------
+# Staff (registry) — HR foundation for attendance
+# ---------------------------------------------------------------------------
+
+class StaffDesignation(models.TextChoices):
+    NURSE = 'NURSE', 'Nurse'
+    ATTENDANT = 'ATTENDANT', 'Attendant'   # ward aide / caretaker
+    COOK = 'COOK', 'Cook'
+    CLEANER = 'CLEANER', 'Cleaner'
+    SECURITY = 'SECURITY', 'Security'
+    ADMIN_STAFF = 'ADMIN_STAFF', 'Administrative'
+    OTHER = 'OTHER', 'Other'
+
+
+class Staff(models.Model):
+    """An employee on the premises — not necessarily an app user. Most staff
+    (cooks, attendants, cleaners…) have no login; ``user`` links the few who do.
+
+    ``staff_code`` is auto-generated as STF-NNNN on first save (a global,
+    zero-padded sequence). Rows are deactivated (``is_active=False``), never
+    deleted, so attendance history stays intact.
+    """
+    staff_code = models.CharField(max_length=20, unique=True, editable=False)
+    name = models.CharField(max_length=255)
+    designation = models.CharField(
+        max_length=12, choices=StaffDesignation.choices,
+        default=StaffDesignation.OTHER,
+    )
+    phone = models.CharField(max_length=20, blank=True)
+    is_active = models.BooleanField(default=True)
+    joined_on = models.DateField(null=True, blank=True)
+    # Optional link to an app login, for staff who also use the system.
+    user = models.OneToOneField(
+        User, on_delete=models.SET_NULL, related_name='staff_profile',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Staff'
+        verbose_name_plural = 'Staff'
+
+    def save(self, *args, **kwargs):
+        if not self.staff_code:
+            last = (
+                Staff.objects
+                .filter(staff_code__startswith='STF-')
+                .order_by('staff_code')
+                .last()
+            )
+            nxt = 1
+            if last and last.staff_code[4:].isdigit():
+                nxt = int(last.staff_code[4:]) + 1
+            self.staff_code = f'STF-{nxt:04d}'
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.staff_code} — {self.name}'

@@ -312,6 +312,19 @@ class InquiryType:
     updated_at: auto
 
 
+@strawberry_django.type(models.Staff)
+class StaffType:
+    id: auto
+    staff_code: auto
+    name: auto
+    designation: auto
+    phone: auto
+    is_active: auto
+    joined_on: auto
+    user: Optional[UserType]
+    created_at: auto
+
+
 @strawberry_django.type(models.FollowUp)
 class FollowUpType:
     id: auto

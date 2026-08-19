@@ -748,3 +748,48 @@ export const MARK_FOLLOW_UP_DONE = gql`
     }
   }
 `;
+
+// --- Staff registry -------------------------------------------------------
+
+export const STAFF_LIST = gql`
+  query StaffList(
+    $includeInactive: Boolean
+    $designation: StaffDesignationEnum
+    $search: String
+  ) {
+    staffList(
+      includeInactive: $includeInactive
+      designation: $designation
+      search: $search
+    ) {
+      id
+      staffCode
+      name
+      designation
+      phone
+      isActive
+      joinedOn
+    }
+  }
+`;
+
+export const CREATE_STAFF = gql`
+  mutation CreateStaff($data: CreateStaffInput!) {
+    createStaff(data: $data) {
+      id
+    }
+  }
+`;
+
+export const UPDATE_STAFF = gql`
+  mutation UpdateStaff($id: ID!, $data: UpdateStaffInput!) {
+    updateStaff(staffId: $id, data: $data) {
+      id
+      name
+      designation
+      phone
+      isActive
+      joinedOn
+    }
+  }
+`;

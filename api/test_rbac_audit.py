@@ -30,6 +30,7 @@ OPERATIONS = [
     # --- Queries: ADMIN only ----------------------------------------------
     ("users", "{ users { id } }", {"ADMIN"}),
     ("systemSettings", "{ systemSettings { feeDueWarningDays } }", {"ADMIN"}),
+    ("staffList", "{ staffList { id } }", {"ADMIN"}),
     # --- Queries: ADMIN + PRO (PRM) ---------------------------------------
     ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
     ("followUps", '{ followUps(patientId: "1") { id } }', {"ADMIN", "PRO"}),
@@ -70,6 +71,16 @@ OPERATIONS = [
     ),
     ("deactivateUser", 'mutation { deactivateUser(userId: "999999") { id } }', {"ADMIN"}),
     ("updateSettings", "mutation { updateSettings(feeDueWarningDays: 7) { feeDueWarningDays } }", {"ADMIN"}),
+    (
+        "createStaff",
+        'mutation { createStaff(data: {name: "x"}) { id } }',
+        {"ADMIN"},
+    ),
+    (
+        "updateStaff",
+        'mutation { updateStaff(staffId: "999999", data: {phone: "1"}) { id } }',
+        {"ADMIN"},
+    ),
     # --- Mutations: ADMIN + FINANCE ---------------------------------------
     (
         "recordPayment",
