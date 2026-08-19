@@ -13,6 +13,7 @@ import {
   Settings,
   ShieldCheck,
   UserPlus,
+  Users,
   Wallet,
 } from "lucide-react";
 
@@ -113,6 +114,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Administration",
     items: [
       { label: "Users & roles", href: "/users", icon: ShieldCheck },
+      { label: "Staff", href: "/staff", icon: Users, roles: ["ADMIN"] },
       { label: "Settings", href: "/settings", icon: Settings },
     ],
   },
