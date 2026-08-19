@@ -1,7 +1,11 @@
 name: CI
 
 on:
+  # Run on pushes to main (post-merge) and on every PR. Feature branches are
+  # covered by their PR, so scoping push to main avoids running CI twice for
+  # the same commit (a branch push + its pull_request event).
   push:
+    branches: [main]
   pull_request:
 
 # Cancel superseded runs on the same ref.
