@@ -793,3 +793,47 @@ export const UPDATE_STAFF = gql`
     }
   }
 `;
+
+// --- Staff attendance -----------------------------------------------------
+
+export const ATTENDANCE_ROSTER = gql`
+  query AttendanceRoster($date: Date!) {
+    attendanceRoster(date: $date) {
+      staff {
+        id
+        staffCode
+        name
+        designation
+      }
+      status
+    }
+  }
+`;
+
+export const BULK_MARK_ATTENDANCE = gql`
+  mutation BulkMarkAttendance($date: Date!, $entries: [AttendanceEntryInput!]!) {
+    bulkMarkAttendance(date: $date, entries: $entries) {
+      staff {
+        id
+      }
+      status
+    }
+  }
+`;
+
+export const ATTENDANCE_SUMMARY = gql`
+  query AttendanceSummary($staffId: ID!, $from: Date, $to: Date) {
+    attendanceSummary(staffId: $staffId, dateFrom: $from, dateTo: $to) {
+      staff {
+        id
+        name
+        staffCode
+      }
+      present
+      absent
+      leave
+      halfDay
+      markedDays
+    }
+  }
+`;

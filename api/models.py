@@ -688,3 +688,35 @@ class Staff(models.Model):
 
     def __str__(self):
         return f'{self.staff_code} — {self.name}'
+
+
+class AttendanceStatus(models.TextChoices):
+    PRESENT = 'PRESENT', 'Present'
+    ABSENT = 'ABSENT', 'Absent'
+    LEAVE = 'LEAVE', 'Leave'
+    HALF_DAY = 'HALF_DAY', 'Half-day'
+
+
+class Attendance(models.Model):
+    """One staff member's attendance status for one day. At most one row per
+    (staff, date) — marking again updates it. ``recorded_by`` is the ADMIN who
+    marked it."""
+    staff = models.ForeignKey(
+        Staff, on_delete=models.CASCADE, related_name='attendance'
+    )
+    date = models.DateField()
+    status = models.CharField(max_length=10, choices=AttendanceStatus.choices)
+    recorded_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='recorded_attendance',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('staff', 'date')]
+        ordering = ['-date', 'staff__name']
+        indexes = [models.Index(fields=['date'])]
+
+    def __str__(self):
+        return f'{self.staff.name} — {self.date} ({self.status})'

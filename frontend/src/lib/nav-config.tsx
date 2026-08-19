@@ -2,6 +2,7 @@ import {
   Activity,
   Banknote,
   Building2,
+  CalendarCheck,
   CalendarClock,
   HeartPulse,
   History,
@@ -115,6 +116,12 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Users & roles", href: "/users", icon: ShieldCheck },
       { label: "Staff", href: "/staff", icon: Users, roles: ["ADMIN"] },
+      {
+        label: "Attendance",
+        href: "/attendance",
+        icon: CalendarCheck,
+        roles: ["ADMIN"],
+      },
       { label: "Settings", href: "/settings", icon: Settings },
     ],
   },
