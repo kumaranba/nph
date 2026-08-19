@@ -789,9 +789,10 @@ class Query:
         return build_pending_dues()
 
     # Discharged admissions, optionally filtered to patients carrying a given
-    # tag, sorted by discharge date (newest first by default). ADMIN + FINANCE.
+    # tag, sorted by discharge date (newest first by default). ADMIN + FINANCE
+    # + PRO (PROs work follow-ups off the discharged list).
     @strawberry.field
-    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.PRO)
     def discharged_list(
         self, info: Info, tag: Optional[str] = None, sort_desc: bool = True
     ) -> List[DischargedPatientItem]:

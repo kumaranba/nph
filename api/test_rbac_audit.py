@@ -35,6 +35,8 @@ OPERATIONS = [
     ("followUps", '{ followUps(patientId: "1") { id } }', {"ADMIN", "PRO"}),
     ("dueFollowUps", "{ dueFollowUps { id } }", {"ADMIN", "PRO"}),
     ("dueFollowUpCount", "{ dueFollowUpCount }", {"ADMIN", "PRO"}),
+    # Discharged list is shared with PRO (they follow up discharged patients).
+    ("dischargedList", "{ dischargedList { id } }", {"ADMIN", "FINANCE", "PRO"}),
     # --- Queries: ADMIN + FINANCE -----------------------------------------
     ("invoices", "{ invoices { id } }", {"ADMIN", "FINANCE"}),
     ("payments", "{ payments { id } }", {"ADMIN", "FINANCE"}),

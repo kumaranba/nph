@@ -48,7 +48,10 @@ export default function DischargedPage() {
   const { data: meData, loading: meLoading } = useQuery<MeResult>(ME, {
     skip: !hasToken,
   });
-  const allowed = meData?.me.role === "ADMIN" || meData?.me.role === "FINANCE";
+  const allowed =
+    meData?.me.role === "ADMIN" ||
+    meData?.me.role === "FINANCE" ||
+    meData?.me.role === "PRO";
 
   const { data, loading, error, refetch } = useQuery<Result>(DISCHARGED_LIST, {
     variables: { tag: tag || null, sortDesc },
@@ -71,7 +74,8 @@ export default function DischargedPage() {
           <CardHeader>
             <CardTitle>Not authorized</CardTitle>
             <CardDescription>
-              The discharged-patient list is available to Finance and Admin only.
+              The discharged-patient list is available to Admin, Finance and
+              Patient Relations only.
             </CardDescription>
           </CardHeader>
         </Card>

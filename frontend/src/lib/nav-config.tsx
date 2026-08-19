@@ -67,7 +67,13 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["ADMIN", "FINANCE", "NURSE", "PRO"],
       },
       { label: "New admission", href: "/admissions/new", icon: UserPlus },
-      { label: "Discharged", href: "/discharged", icon: UserMinus },
+      // PRO sees Discharged too — they work follow-ups off this list.
+      {
+        label: "Discharged",
+        href: "/discharged",
+        icon: UserMinus,
+        roles: ["ADMIN", "FINANCE", "PRO"],
+      },
     ],
   },
   {
