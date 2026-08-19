@@ -7,6 +7,7 @@ from django.http import HttpResponse, JsonResponse
 from strawberry.django.views import GraphQLView
 
 from .auth import get_user_from_request
+from .inquiry_import import ImportFileError, import_op_list
 from .models import Patient, PaymentReceipt, UserRole
 from .reports import account_statement_pdf, fees_due_pdf, receipt_pdf
 
@@ -158,3 +159,28 @@ def patient_photo_upload_view(request, patient_id):
 def patient_aadhar_scan_upload_view(request, patient_id):
     """Upload/replace a patient's Aadhar scan (image or PDF). ADMIN."""
     return _upload_patient_file(request, patient_id, "aadhar_scan", _SCAN_TYPES)
+
+
+def op_list_import_view(request):
+    """Bulk-import an OP list (CSV or .xlsx) into inquiries. PRO only —
+    inquiry management is the PRO's domain. multipart field 'file'. Returns a
+    per-row summary: {total, created, duplicates, errors:[{row, message}]}."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required."}, status=405)
+    user = get_user_from_request(request)
+    if user is None:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    if user.role != UserRole.PRO:
+        return JsonResponse({"error": "Permission denied."}, status=403)
+
+    upload = request.FILES.get("file")
+    if upload is None:
+        return JsonResponse({"error": "No file uploaded (field 'file')."}, status=400)
+    if upload.size > settings.MAX_UPLOAD_BYTES:
+        return JsonResponse({"error": "File is too large."}, status=413)
+
+    try:
+        summary = import_op_list(upload.name, upload.read(), user)
+    except ImportFileError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(summary)
