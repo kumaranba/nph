@@ -17,18 +17,18 @@ from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
-    Attendance, AttendanceStatus, FollowUp, FoodPreference, Gender, Inquiry,
-    InquirySource, InquiryStatus, Invoice, InvoiceStatus, Patient, Payment,
-    PaymentAccount, PaymentReceipt, Room, Staff, StaffDesignation,
+    Attendance, AttendanceStatus, FollowUp, FoodPreference, FoodRate, Gender,
+    Inquiry, InquirySource, InquiryStatus, Invoice, InvoiceStatus, Patient,
+    Payment, PaymentAccount, PaymentReceipt, Room, Staff, StaffDesignation,
     SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
     VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
     AdditionalChargeType, AdmissionType, AttendanceType, BedType, FeeType,
-    FollowUpType, InquiryType, InvoiceType, PatientType, PaymentAccountType,
-    PaymentReceiptType, PaymentType, RoomType, StaffType, TagType, UserType,
-    VitalReadingType, VitalsThresholdType,
+    FollowUpType, FoodRateType, InquiryType, InvoiceType, PatientType,
+    PaymentAccountType, PaymentReceiptType, PaymentType, RoomType, StaffType,
+    TagType, UserType, VitalReadingType, VitalsThresholdType,
 )
 
 
@@ -772,6 +772,19 @@ class Query:
             half_day=half_day,
             marked_days=present + absent + leave + half_day,
         )
+
+    # --- Food vendor rate (ADMIN + FINANCE) -------------------------------
+    # Full food-rate history, newest effective_from first. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def food_rates(self, info: Info) -> List[FoodRateType]:
+        return FoodRate.objects.all()
+
+    # The food rate in force today (None if none set yet). ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def current_food_rate(self, info: Info) -> Optional[FoodRateType]:
+        return FoodRate.rate_on(_today())
 
     # --- ADMIN + FINANCE (financial data) ----------------------------------
     @strawberry.field
@@ -2030,6 +2043,30 @@ class Mutation:
             AttendanceRosterItem(staff=s, status=marked.get(s.id))
             for s in staff
         ]
+
+    # --- Food vendor rate (ADMIN + FINANCE) -------------------------------
+    # Set the food rate from a date. Adds a new effective-dated row (history is
+    # preserved; existing rows are never edited). Amount must be non-negative;
+    # effective_from defaults to today. Re-setting the same date replaces that
+    # day's row. ADMIN + FINANCE.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def set_food_rate(
+        self,
+        info: Info,
+        amount: Decimal,
+        effective_from: Optional[date] = None,
+        note: Optional[str] = "",
+    ) -> FoodRateType:
+        if amount < 0:
+            raise GraphQLError('Food rate cannot be negative.')
+        eff = effective_from or _today()
+        return FoodRate.objects.create(
+            amount=amount,
+            effective_from=eff,
+            note=(note or '').strip(),
+            created_by=info.context.request.user,
+        )
 
     # --- PRM: inquiry writes (PRO only; ADMIN is view-only) ----------------
     # Log a new inquiry. Starts NEW, stamped with the creating PRO. PRO only.

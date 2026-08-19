@@ -837,3 +837,32 @@ export const ATTENDANCE_SUMMARY = gql`
     }
   }
 `;
+
+// --- Food vendor rate -----------------------------------------------------
+
+export const FOOD_RATES = gql`
+  query FoodRates {
+    currentFoodRate {
+      id
+      amount
+      effectiveFrom
+    }
+    foodRates {
+      id
+      amount
+      effectiveFrom
+      note
+      createdBy {
+        email
+      }
+    }
+  }
+`;
+
+export const SET_FOOD_RATE = gql`
+  mutation SetFoodRate($amount: Decimal!, $effectiveFrom: Date, $note: String) {
+    setFoodRate(amount: $amount, effectiveFrom: $effectiveFrom, note: $note) {
+      id
+    }
+  }
+`;

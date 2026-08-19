@@ -720,3 +720,41 @@ class Attendance(models.Model):
 
     def __str__(self):
         return f'{self.staff.name} — {self.date} ({self.status})'
+
+
+# ---------------------------------------------------------------------------
+# Food vendor — per-patient-day rate (effective-dated, history preserved)
+# ---------------------------------------------------------------------------
+
+class FoodRate(models.Model):
+    """A flat food charge per patient-day paid to the catering vendor.
+
+    Rates form an effective-dated timeline: the rate for any day D is the
+    FoodRate with the greatest ``effective_from`` on or before D. Rows are
+    never edited or deleted — a rate change adds a new row — so a payment list
+    over a past range always prices each day at the rate then in force.
+    """
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    effective_from = models.DateField()
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='created_food_rates',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-effective_from', '-id']
+
+    def __str__(self):
+        return f'FoodRate ₹{self.amount}/day from {self.effective_from}'
+
+    @classmethod
+    def rate_on(cls, day):
+        """The FoodRate in force on ``day``, or None if none is effective yet."""
+        return (
+            cls.objects
+            .filter(effective_from__lte=day)
+            .order_by('-effective_from', '-id')
+            .first()
+        )

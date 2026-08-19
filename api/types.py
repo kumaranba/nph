@@ -325,6 +325,16 @@ class StaffType:
     created_at: auto
 
 
+@strawberry_django.type(models.FoodRate)
+class FoodRateType:
+    id: auto
+    amount: auto
+    effective_from: auto
+    note: auto
+    created_by: Optional[UserType]
+    created_at: auto
+
+
 @strawberry_django.type(models.Attendance)
 class AttendanceType:
     id: auto
