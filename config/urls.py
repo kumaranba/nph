@@ -9,6 +9,7 @@ from api.views import (
     JWTGraphQLView,
     account_statement_pdf_view,
     fees_due_pdf_view,
+    op_list_import_view,
     patient_aadhar_scan_upload_view,
     patient_photo_upload_view,
     receipt_pdf_view,
@@ -31,6 +32,8 @@ urlpatterns = [
          csrf_exempt(patient_photo_upload_view)),
     path('patients/<int:patient_id>/aadhar-scan',
          csrf_exempt(patient_aadhar_scan_upload_view)),
+    # OP-list bulk import → inquiries (multipart CSV/.xlsx). Bearer-auth, PRO.
+    path('inquiries/import', csrf_exempt(op_list_import_view)),
 ]
 
 # Serve uploaded media from MEDIA_ROOT in development. In production, the web
