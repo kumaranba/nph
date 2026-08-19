@@ -55,6 +55,8 @@ OPERATIONS = [
     ("invoiceList", '{ invoiceList(patientId: "1") { id } }', {"ADMIN", "FINANCE"}),
     ("feesDueList", "{ feesDueList { id } }", {"ADMIN", "FINANCE"}),
     ("feeHistory", '{ feeHistory(patientId: "1") { id } }', {"ADMIN", "FINANCE"}),
+    ("foodRates", "{ foodRates { id } }", {"ADMIN", "FINANCE"}),
+    ("currentFoodRate", "{ currentFoodRate { id } }", {"ADMIN", "FINANCE"}),
     # --- Queries: ADMIN + NURSE -------------------------------------------
     ("vitalReadings", "{ vitalReadings { id } }", {"ADMIN", "NURSE"}),
     ("vitalHistory", '{ vitalHistory(patientId: "1") { id } }', {"ADMIN", "NURSE"}),
@@ -142,6 +144,11 @@ OPERATIONS = [
         "changeFee",
         'mutation { changeFee(admissionId: "1", amount: "1", reason: "r") { id } }',
         {"FINANCE"},
+    ),
+    (
+        "setFoodRate",
+        'mutation { setFoodRate(amount: "100") { id } }',
+        {"ADMIN", "FINANCE"},
     ),
     # --- Mutations: ADMIN + NURSE -----------------------------------------
     (

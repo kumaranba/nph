@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   UserPlus,
   Users,
+  UtensilsCrossed,
   Wallet,
 } from "lucide-react";
 
@@ -109,6 +110,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Record payment", href: "/payments/new", icon: Banknote },
       { label: "Payments history", href: "/payments/history", icon: History },
       { label: "Change fee", href: "/fees/change", icon: Receipt },
+      {
+        label: "Food vendor",
+        href: "/food-vendor",
+        icon: UtensilsCrossed,
+        roles: ["ADMIN", "FINANCE"],
+      },
     ],
   },
   {
