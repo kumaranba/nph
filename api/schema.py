@@ -15,6 +15,7 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 from . import auth, dashboard, vitals
 from .billing import BillingService
 from .fees import FeeError, FeeService
+from .food_report import build_food_vendor_list, build_patient_food_report
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
     Attendance, AttendanceStatus, FollowUp, FoodPreference, FoodRate, Gender,
@@ -331,6 +332,58 @@ class DischargedPatientItem:
     discharge_type: str
     room: Optional[str]
     tags: List[str]
+
+
+@strawberry.type
+class VendorDayType:
+    """One day in the food vendor payment list."""
+    day: date
+    patients: int
+    rate: Decimal
+    amount: Decimal
+
+
+@strawberry.type
+class FoodVendorListType:
+    """Daily food vendor payment list over a date range, with totals."""
+    date_from: date
+    date_to: date
+    rows: List[VendorDayType]
+    total_patient_days: int
+    total_amount: Decimal
+
+
+@strawberry.type
+class PatientFoodRowType:
+    """One patient's (admission's) food consumption within a month."""
+    patient_pk: strawberry.ID
+    patient_code: str
+    name: str
+    days: int
+    rate: Decimal
+    amount: Decimal
+
+
+@strawberry.type
+class PatientFoodGroupType:
+    """A group of the patient-wise food report (discharged / newly-admitted /
+    whole-month) with its own totals."""
+    key: str
+    label: str
+    rows: List[PatientFoodRowType]
+    total_days: int
+    total_amount: Decimal
+
+
+@strawberry.type
+class PatientFoodReportType:
+    """Patient-wise monthly food report: three groups, each with a total, plus
+    a grand total. ``month`` is 'YYYY-MM'; ``rate`` is the per-day rate used."""
+    month: str
+    rate: Decimal
+    groups: List[PatientFoodGroupType]
+    grand_total_days: int
+    grand_total_amount: Decimal
 
 
 @strawberry.type
@@ -785,6 +838,67 @@ class Query:
     @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def current_food_rate(self, info: Info) -> Optional[FoodRateType]:
         return FoodRate.rate_on(_today())
+
+    # Daily food vendor payment list over an inclusive date range (end clamped
+    # to today). Patient-days that day × the day's rate. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def food_vendor_list(
+        self, info: Info, date_from: date, date_to: date
+    ) -> FoodVendorListType:
+        if date_to < date_from:
+            raise GraphQLError('date_to must be on or after date_from.')
+        data = build_food_vendor_list(date_from, date_to, today=_today())
+        return FoodVendorListType(
+            date_from=data.date_from,
+            date_to=data.date_to,
+            rows=[
+                VendorDayType(day=r.day, patients=r.patients, rate=r.rate,
+                              amount=r.amount)
+                for r in data.rows
+            ],
+            total_patient_days=data.total_patient_days,
+            total_amount=data.total_amount,
+        )
+
+    # Patient-wise food consumption for a calendar month ('YYYY-MM', defaults to
+    # the current month), grouped: discharged / newly-admitted / whole-month,
+    # with per-group and grand totals. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def patient_food_report(
+        self, info: Info, month: Optional[str] = None
+    ) -> PatientFoodReportType:
+        try:
+            data = build_patient_food_report(month=month, today=_today())
+        except (ValueError, IndexError):
+            raise GraphQLError("month must be in 'YYYY-MM' format.")
+        return PatientFoodReportType(
+            month=data.month,
+            rate=data.rate,
+            groups=[
+                PatientFoodGroupType(
+                    key=g.key,
+                    label=g.label,
+                    rows=[
+                        PatientFoodRowType(
+                            patient_pk=r.patient_pk,
+                            patient_code=r.patient_code,
+                            name=r.name,
+                            days=r.days,
+                            rate=r.rate,
+                            amount=r.amount,
+                        )
+                        for r in g.rows
+                    ],
+                    total_days=g.total_days,
+                    total_amount=g.total_amount,
+                )
+                for g in data.groups
+            ],
+            grand_total_days=data.grand_total_days,
+            grand_total_amount=data.grand_total_amount,
+        )
 
     # --- ADMIN + FINANCE (financial data) ----------------------------------
     @strawberry.field

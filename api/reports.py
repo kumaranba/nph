@@ -293,3 +293,124 @@ def account_statement_pdf(buffer, statement):
 
     doc.build(story)
     return buffer
+
+
+# Month 'YYYY-MM' → 'Month YYYY' for headings.
+def _fmt_month(month: str) -> str:
+    try:
+        y, m = (int(p) for p in month.split("-"))
+        return date(y, m, 1).strftime("%B %Y")
+    except (ValueError, IndexError):
+        return month
+
+
+def _totals_table_style(last_row):
+    """Shared TableStyle for a right-aligned amount table with a bold header and
+    a bold totals row at ``last_row``."""
+    return TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("LINEABOVE", (0, last_row), (-1, last_row), 0.6, colors.HexColor("#1f2937")),
+        ("FONTNAME", (0, last_row), (-1, last_row), "Helvetica-Bold"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, last_row - 1),
+         [colors.white, colors.HexColor("#f3f4f6")]),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ])
+
+
+def food_vendor_list_pdf(buffer, data):
+    """Render the daily food vendor payment list (``VendorList``) into buffer."""
+    styles = _build_styles()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        topMargin=14 * mm, bottomMargin=14 * mm,
+        leftMargin=14 * mm, rightMargin=14 * mm,
+        title="Food Vendor Payment List",
+    )
+    story = [
+        Paragraph("Nila Psychiatric Hospital", styles["title"]),
+        Paragraph(
+            f"Food Vendor Payment List  |  {_fmt_date(data.date_from)} to "
+            f"{_fmt_date(data.date_to)}",
+            styles["sub"],
+        ),
+    ]
+
+    rows = [["S.No", "Date", "Patients", "Rate/day", "Amount"]]
+    for n, r in enumerate(data.rows, start=1):
+        rows.append([
+            str(n), _fmt_date(r.day), str(r.patients),
+            _rupee(r.rate), _rupee(r.amount),
+        ])
+    rows.append([
+        "", "Total", str(data.total_patient_days), "",
+        _rupee(data.total_amount),
+    ])
+
+    table = Table(
+        rows, colWidths=[16 * mm, 40 * mm, 34 * mm, 40 * mm, 40 * mm],
+        repeatRows=1,
+    )
+    table.setStyle(_totals_table_style(len(rows) - 1))
+    story.append(table)
+    story.append(Paragraph(
+        "<br/>Patient-days count every day from admission through discharge "
+        "(both inclusive), priced at the food rate in force each day.",
+        styles["sub"],
+    ))
+    doc.build(story)
+
+
+def patient_food_report_pdf(buffer, report):
+    """Render the patient-wise monthly food report (``PatientFoodReport``)."""
+    styles = _build_styles()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        topMargin=14 * mm, bottomMargin=14 * mm,
+        leftMargin=14 * mm, rightMargin=14 * mm,
+        title=f"Patient Food Report — {report.month}",
+    )
+    group_style = ParagraphStyle(
+        "grp", parent=styles["title"], fontSize=11, spaceBefore=10, spaceAfter=4,
+    )
+    story = [
+        Paragraph("Nila Psychiatric Hospital", styles["title"]),
+        Paragraph(
+            f"Patient Food Report  |  {_fmt_month(report.month)}  |  "
+            f"rate {_rupee(report.rate)}/patient-day",
+            styles["sub"],
+        ),
+    ]
+
+    for grp in report.groups:
+        story.append(Paragraph(
+            f"{grp.label} ({len(grp.rows)})", group_style
+        ))
+        rows = [["S.No", "Patient", "Days", "Rate/day", "Monthly amount"]]
+        for n, r in enumerate(grp.rows, start=1):
+            rows.append([
+                str(n), Paragraph(r.name, styles["cell"]), str(r.days),
+                _rupee(r.rate), _rupee(r.amount),
+            ])
+        rows.append([
+            "", "Group total", str(grp.total_days), "", _rupee(grp.total_amount),
+        ])
+        table = Table(
+            rows, colWidths=[16 * mm, 70 * mm, 24 * mm, 40 * mm, 40 * mm],
+            repeatRows=1,
+        )
+        table.setStyle(_totals_table_style(len(rows) - 1))
+        story.append(table)
+
+    story.append(Paragraph(
+        f"<br/>Grand total: {report.grand_total_days} patient-days  |  "
+        f"{_rupee(report.grand_total_amount)}",
+        styles["sub"],
+    ))
+    doc.build(story)

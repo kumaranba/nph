@@ -866,3 +866,47 @@ export const SET_FOOD_RATE = gql`
     }
   }
 `;
+
+// --- Food reports ---------------------------------------------------------
+
+export const FOOD_VENDOR_LIST = gql`
+  query FoodVendorList($from: Date!, $to: Date!) {
+    foodVendorList(dateFrom: $from, dateTo: $to) {
+      dateFrom
+      dateTo
+      totalPatientDays
+      totalAmount
+      rows {
+        day
+        patients
+        rate
+        amount
+      }
+    }
+  }
+`;
+
+export const PATIENT_FOOD_REPORT = gql`
+  query PatientFoodReport($month: String) {
+    patientFoodReport(month: $month) {
+      month
+      rate
+      grandTotalDays
+      grandTotalAmount
+      groups {
+        key
+        label
+        totalDays
+        totalAmount
+        rows {
+          patientPk
+          patientCode
+          name
+          days
+          rate
+          amount
+        }
+      }
+    }
+  }
+`;

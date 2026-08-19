@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { FoodVendorListReport } from "@/components/food-vendor-list-report";
+import { PatientFoodReport } from "@/components/patient-food-report";
 import { LinesSkeleton, QueryError } from "@/components/query-states";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +46,7 @@ export default function FoodVendorPage() {
   const router = useRouter();
   const me = useMe();
   const [showForm, setShowForm] = useState(false);
+  const [tab, setTab] = useState<"rate" | "vendor" | "patient">("rate");
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -111,6 +114,57 @@ export default function FoodVendorPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex gap-1 rounded-lg border bg-muted/40 p-1 text-sm">
+        {[
+          { k: "rate", label: "Rate" },
+          { k: "vendor", label: "Vendor payment list" },
+          { k: "patient", label: "Patient report" },
+        ].map((t) => (
+          <button
+            key={t.k}
+            type="button"
+            onClick={() => setTab(t.k as typeof tab)}
+            className={`flex-1 rounded-md px-3 py-1.5 font-medium transition-colors ${
+              tab === t.k
+                ? "bg-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "vendor" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Food vendor payment list</CardTitle>
+            <CardDescription>
+              Daily patient-days × the day&rsquo;s rate, over a date range
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FoodVendorListReport />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tab === "patient" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Patient food report</CardTitle>
+            <CardDescription>
+              Per-patient consumption for a month, grouped
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PatientFoodReport />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tab === "rate" ? (
+      <>
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
@@ -268,6 +322,8 @@ export default function FoodVendorPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      ) : null}
     </main>
   );
 }
