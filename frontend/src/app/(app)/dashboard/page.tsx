@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { Plus, HeartPulse, Banknote } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useMe } from "@/lib/me-context";
@@ -16,15 +18,33 @@ import { ActivityCard } from "@/components/dashboard/activity-card";
 
 export default function DashboardPage() {
   const me = useMe();
+  const router = useRouter();
   const role = me?.role ?? "ADMIN";
   const isNurse = role === "NURSE";
   const isFinance = role === "FINANCE";
+  const isPro = role === "PRO";
+
+  // PRO has no dashboard access (its widgets are billing/clinical); send them
+  // to their home. This also handles the post-login redirect, which always
+  // targets /dashboard.
+  useEffect(() => {
+    if (isPro) router.replace("/inquiries");
+  }, [isPro, router]);
 
   // Role-adaptive: Nurse hides billing panels, Finance hides the clinical feed.
   const showBilling = !isNurse; // payments trend + fees-due table
   const showClinicalFeed = !isFinance; // flagged vitals feed
 
   const firstName = me?.email ? me.email.split("@")[0] : "";
+
+  // Don't mount the (billing/clinical) widgets for a PRO mid-redirect.
+  if (isPro) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <p className="text-sm text-muted-foreground">Redirecting…</p>
+      </main>
+    );
+  }
 
   return (
     <>

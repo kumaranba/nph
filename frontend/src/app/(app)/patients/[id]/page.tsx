@@ -11,6 +11,7 @@ import {
 import { DischargeModal } from "@/components/discharge-modal";
 import { EditPatientModal } from "@/components/edit-patient-modal";
 import { PatientDocumentsPanel } from "@/components/patient-documents-panel";
+import { PatientFollowUpsPanel } from "@/components/patient-follow-ups-panel";
 import { ReadmitModal } from "@/components/readmit-modal";
 import { formatDate } from "@/lib/format-date";
 import { PatientTagsPanel } from "@/components/patient-tags-panel";
@@ -112,6 +113,9 @@ export default function PatientProfilePage() {
   const canEditTags = role === "ADMIN" || role === "NURSE";
   // Only ADMIN may edit patient profile details.
   const canEditPatient = role === "ADMIN";
+  // PRM roles (PRO + ADMIN) see the follow-ups panel; PRO may also manage it.
+  const canViewFollowUps = role === "PRO" || role === "ADMIN";
+  const canManageFollowUps = role === "PRO";
   // Show the charge log for the active admission, else the most recent one.
   const chargesAdmission =
     activeAdmission ??
@@ -290,6 +294,13 @@ export default function PatientProfilePage() {
           patientId={patient.id}
           photoUrl={patient.photoUrl}
           isAdmin={canEditPatient}
+        />
+      ) : null}
+
+      {patient && canViewFollowUps ? (
+        <PatientFollowUpsPanel
+          patientId={patient.id}
+          canManage={canManageFollowUps}
         />
       ) : null}
 
