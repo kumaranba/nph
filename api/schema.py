@@ -17,15 +17,16 @@ from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
-    FollowUp, FoodPreference, Gender, Inquiry, InquirySource, InquiryStatus,
-    Invoice, InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
-    Room, Staff, StaffDesignation, SystemSetting, Tag, TagCategory, User,
-    UserRole, VitalReading, VitalsThreshold,
+    Attendance, AttendanceStatus, FollowUp, FoodPreference, Gender, Inquiry,
+    InquirySource, InquiryStatus, Invoice, InvoiceStatus, Patient, Payment,
+    PaymentAccount, PaymentReceipt, Room, Staff, StaffDesignation,
+    SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
+    VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
-    AdditionalChargeType, AdmissionType, BedType, FeeType, FollowUpType,
-    InquiryType, InvoiceType, PatientType, PaymentAccountType,
+    AdditionalChargeType, AdmissionType, AttendanceType, BedType, FeeType,
+    FollowUpType, InquiryType, InvoiceType, PatientType, PaymentAccountType,
     PaymentReceiptType, PaymentType, RoomType, StaffType, TagType, UserType,
     VitalReadingType, VitalsThresholdType,
 )
@@ -98,6 +99,15 @@ class StaffDesignationEnum(Enum):
     SECURITY = 'SECURITY'
     ADMIN_STAFF = 'ADMIN_STAFF'
     OTHER = 'OTHER'
+
+
+@strawberry.enum
+class AttendanceStatusEnum(Enum):
+    """GraphQL enum for Attendance.status (mirrors models.AttendanceStatus)."""
+    PRESENT = 'PRESENT'
+    ABSENT = 'ABSENT'
+    LEAVE = 'LEAVE'
+    HALF_DAY = 'HALF_DAY'
 
 
 @strawberry.enum
@@ -245,6 +255,32 @@ class UpdateStaffInput:
     phone: Optional[str] = strawberry.UNSET
     joined_on: Optional[date] = strawberry.UNSET
     is_active: Optional[bool] = strawberry.UNSET
+
+
+@strawberry.type
+class AttendanceRosterItem:
+    """A staff member paired with their attendance status for a given date
+    (``status`` is null when not yet marked). Drives the roster grid."""
+    staff: StaffType
+    status: Optional[AttendanceStatusEnum]
+
+
+@strawberry.type
+class AttendanceSummary:
+    """Attendance counts for one staff member over a date range."""
+    staff: StaffType
+    present: int
+    absent: int
+    leave: int
+    half_day: int
+    marked_days: int
+
+
+@strawberry.input
+class AttendanceEntryInput:
+    """One staff member's status in a bulk roster save."""
+    staff_id: strawberry.ID
+    status: AttendanceStatusEnum
 
 
 @strawberry.input
@@ -682,6 +718,60 @@ class Query:
                 | Q(phone__icontains=term)
             )
         return qs.order_by('name', 'id')
+
+    # Attendance roster for a date: every active staff member paired with their
+    # status that day (null when unmarked). ADMIN only.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN)
+    def attendance_roster(
+        self, info: Info, date: date
+    ) -> List[AttendanceRosterItem]:
+        marked = {
+            a.staff_id: a.status
+            for a in Attendance.objects.filter(date=date)
+        }
+        staff = Staff.objects.filter(is_active=True).order_by('name', 'id')
+        return [
+            AttendanceRosterItem(staff=s, status=marked.get(s.id))
+            for s in staff
+        ]
+
+    # Per-staff attendance counts over an inclusive date range. Omit a bound
+    # for an open end. ADMIN only.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN)
+    def attendance_summary(
+        self,
+        info: Info,
+        staff_id: strawberry.ID,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> AttendanceSummary:
+        try:
+            staff = Staff.objects.get(pk=staff_id)
+        except Staff.DoesNotExist:
+            raise GraphQLError('Staff not found.')
+        qs = Attendance.objects.filter(staff=staff)
+        if date_from is not None:
+            qs = qs.filter(date__gte=date_from)
+        if date_to is not None:
+            qs = qs.filter(date__lte=date_to)
+        counts = {
+            row['status']: row['n']
+            for row in qs.values('status').annotate(n=Count('id'))
+        }
+        present = counts.get(AttendanceStatus.PRESENT, 0)
+        absent = counts.get(AttendanceStatus.ABSENT, 0)
+        leave = counts.get(AttendanceStatus.LEAVE, 0)
+        half_day = counts.get(AttendanceStatus.HALF_DAY, 0)
+        return AttendanceSummary(
+            staff=staff,
+            present=present,
+            absent=absent,
+            leave=leave,
+            half_day=half_day,
+            marked_days=present + absent + leave + half_day,
+        )
 
     # --- ADMIN + FINANCE (financial data) ----------------------------------
     @strawberry.field
@@ -1880,6 +1970,66 @@ class Mutation:
         if fields:
             staff.save(update_fields=fields)
         return staff
+
+    # --- Staff attendance (ADMIN only) ------------------------------------
+    # Mark one staff member's status for a day (upsert on staff+date). The date
+    # can't be in the future. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def mark_attendance(
+        self,
+        info: Info,
+        staff_id: strawberry.ID,
+        date: date,
+        status: AttendanceStatusEnum,
+    ) -> AttendanceType:
+        if date > _today():
+            raise GraphQLError('Attendance date cannot be in the future.')
+        try:
+            staff = Staff.objects.get(pk=staff_id)
+        except Staff.DoesNotExist:
+            raise GraphQLError('Staff not found.')
+        attendance, _ = Attendance.objects.update_or_create(
+            staff=staff, date=date,
+            defaults={
+                'status': status.value,
+                'recorded_by': info.context.request.user,
+            },
+        )
+        return attendance
+
+    # Save a whole day's roster at once (upsert each entry). The date can't be
+    # in the future. Returns the updated roster. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def bulk_mark_attendance(
+        self, info: Info, date: date, entries: List[AttendanceEntryInput]
+    ) -> List[AttendanceRosterItem]:
+        if date > _today():
+            raise GraphQLError('Attendance date cannot be in the future.')
+        user = info.context.request.user
+        ids = [e.staff_id for e in entries]
+        staff_by_id = {
+            str(s.id): s for s in Staff.objects.filter(pk__in=ids)
+        }
+        missing = [sid for sid in ids if str(sid) not in staff_by_id]
+        if missing:
+            raise GraphQLError('One or more staff were not found.')
+        with transaction.atomic():
+            for entry in entries:
+                Attendance.objects.update_or_create(
+                    staff=staff_by_id[str(entry.staff_id)], date=date,
+                    defaults={'status': entry.status.value, 'recorded_by': user},
+                )
+        marked = {
+            a.staff_id: a.status
+            for a in Attendance.objects.filter(date=date)
+        }
+        staff = Staff.objects.filter(is_active=True).order_by('name', 'id')
+        return [
+            AttendanceRosterItem(staff=s, status=marked.get(s.id))
+            for s in staff
+        ]
 
     # --- PRM: inquiry writes (PRO only; ADMIN is view-only) ----------------
     # Log a new inquiry. Starts NEW, stamped with the creating PRO. PRO only.

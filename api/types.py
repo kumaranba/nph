@@ -325,6 +325,17 @@ class StaffType:
     created_at: auto
 
 
+@strawberry_django.type(models.Attendance)
+class AttendanceType:
+    id: auto
+    staff: StaffType
+    date: auto
+    status: auto
+    recorded_by: Optional[UserType]
+    created_at: auto
+    updated_at: auto
+
+
 @strawberry_django.type(models.FollowUp)
 class FollowUpType:
     id: auto

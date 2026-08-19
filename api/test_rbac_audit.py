@@ -31,6 +31,16 @@ OPERATIONS = [
     ("users", "{ users { id } }", {"ADMIN"}),
     ("systemSettings", "{ systemSettings { feeDueWarningDays } }", {"ADMIN"}),
     ("staffList", "{ staffList { id } }", {"ADMIN"}),
+    (
+        "attendanceRoster",
+        '{ attendanceRoster(date: "2026-01-01") { status } }',
+        {"ADMIN"},
+    ),
+    (
+        "attendanceSummary",
+        '{ attendanceSummary(staffId: "999999") { markedDays } }',
+        {"ADMIN"},
+    ),
     # --- Queries: ADMIN + PRO (PRM) ---------------------------------------
     ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
     ("followUps", '{ followUps(patientId: "1") { id } }', {"ADMIN", "PRO"}),
@@ -79,6 +89,17 @@ OPERATIONS = [
     (
         "updateStaff",
         'mutation { updateStaff(staffId: "999999", data: {phone: "1"}) { id } }',
+        {"ADMIN"},
+    ),
+    (
+        "markAttendance",
+        'mutation { markAttendance(staffId: "999999", date: "2026-01-01",'
+        ' status: PRESENT) { id } }',
+        {"ADMIN"},
+    ),
+    (
+        "bulkMarkAttendance",
+        'mutation { bulkMarkAttendance(date: "2026-01-01", entries: []) { status } }',
         {"ADMIN"},
     ),
     # --- Mutations: ADMIN + FINANCE ---------------------------------------
