@@ -9,8 +9,10 @@ from api.views import (
     JWTGraphQLView,
     account_statement_pdf_view,
     fees_due_pdf_view,
+    food_vendor_list_pdf_view,
     op_list_import_view,
     patient_aadhar_scan_upload_view,
+    patient_food_report_pdf_view,
     patient_photo_upload_view,
     receipt_pdf_view,
 )
@@ -27,6 +29,9 @@ urlpatterns = [
     # Patient account statement (PDF). Bearer-auth, ADMIN + FINANCE.
     path('reports/statement/<int:patient_id>.pdf',
          csrf_exempt(account_statement_pdf_view)),
+    # Food reports (PDF). Bearer-auth, ADMIN + FINANCE.
+    path('reports/food-vendor.pdf', csrf_exempt(food_vendor_list_pdf_view)),
+    path('reports/patient-food.pdf', csrf_exempt(patient_food_report_pdf_view)),
     # Patient document uploads (multipart). Bearer-auth, ADMIN.
     path('patients/<int:patient_id>/photo',
          csrf_exempt(patient_photo_upload_view)),

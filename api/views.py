@@ -7,9 +7,16 @@ from django.http import HttpResponse, JsonResponse
 from strawberry.django.views import GraphQLView
 
 from .auth import get_user_from_request
+from .food_report import build_food_vendor_list, build_patient_food_report
 from .inquiry_import import ImportFileError, import_op_list
 from .models import Patient, PaymentReceipt, UserRole
-from .reports import account_statement_pdf, fees_due_pdf, receipt_pdf
+from .reports import (
+    account_statement_pdf,
+    fees_due_pdf,
+    food_vendor_list_pdf,
+    patient_food_report_pdf,
+    receipt_pdf,
+)
 
 
 def _parse_date(value):
@@ -159,6 +166,67 @@ def patient_photo_upload_view(request, patient_id):
 def patient_aadhar_scan_upload_view(request, patient_id):
     """Upload/replace a patient's Aadhar scan (image or PDF). ADMIN."""
     return _upload_patient_file(request, patient_id, "aadhar_scan", _SCAN_TYPES)
+
+
+def _food_auth(request):
+    """Shared auth for food reports: ADMIN + FINANCE, bearer. Returns an error
+    JsonResponse or None."""
+    user = get_user_from_request(request)
+    if user is None:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    if user.role not in (UserRole.ADMIN, UserRole.FINANCE):
+        return JsonResponse({"error": "Permission denied."}, status=403)
+    return None
+
+
+def food_vendor_list_pdf_view(request):
+    """Download the daily food vendor payment list as a PDF. ADMIN + FINANCE.
+    Required query params: from, to (YYYY-MM-DD)."""
+    denied = _food_auth(request)
+    if denied is not None:
+        return denied
+    date_from = _parse_date(request.GET.get("from"))
+    date_to = _parse_date(request.GET.get("to"))
+    if date_from is None or date_to is None:
+        return JsonResponse(
+            {"error": "from and to (YYYY-MM-DD) are required."}, status=400
+        )
+    if date_to < date_from:
+        return JsonResponse(
+            {"error": "to must be on or after from."}, status=400
+        )
+    data = build_food_vendor_list(date_from, date_to)
+    buffer = io.BytesIO()
+    food_vendor_list_pdf(buffer, data)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="food-vendor-{date_from}-to-{date_to}.pdf"'
+    )
+    return response
+
+
+def patient_food_report_pdf_view(request):
+    """Download the patient-wise monthly food report as a PDF. ADMIN + FINANCE.
+    Optional query param: month (YYYY-MM, defaults to the current month)."""
+    denied = _food_auth(request)
+    if denied is not None:
+        return denied
+    month = request.GET.get("month") or None
+    try:
+        data = build_patient_food_report(month=month)
+    except (ValueError, IndexError):
+        return JsonResponse(
+            {"error": "month must be in YYYY-MM format."}, status=400
+        )
+    buffer = io.BytesIO()
+    patient_food_report_pdf(buffer, data)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="patient-food-{data.month}.pdf"'
+    )
+    return response
 
 
 def op_list_import_view(request):
