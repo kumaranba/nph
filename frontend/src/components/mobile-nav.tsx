@@ -1,16 +1,17 @@
 "use client";
 
 import { useApolloClient } from "@apollo/client";
-import { Bell, LogOut, Menu, Plus, X } from "lucide-react";
+import { LogOut, Menu, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { NotificationBell } from "@/components/notification-bell";
 import { clearTokens } from "@/lib/auth";
 import { useMe, ROLE_LABEL } from "@/lib/me-context";
 import {
   BOTTOM_NAV,
-  NAV_SECTIONS,
+  navSectionsFor,
   QUICK_ACTIONS,
 } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ export function MobileNav() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const sections = navSectionsFor(me?.role);
 
   // Close overlays on route change.
   useEffect(() => {
@@ -74,14 +76,7 @@ export function MobileNav() {
           <span className="text-sm font-semibold">Nila Psychiatric</span>
         </div>
         <div className="flex-1" />
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg border bg-background active:bg-accent"
-        >
-          <Bell className="h-[17px] w-[17px] text-muted-foreground" />
-          <span className="absolute right-2 top-2 h-[7px] w-[7px] rounded-full border-2 border-background bg-red-500" />
-        </button>
+        <NotificationBell />
       </header>
 
       {/* Bottom tab bar */}
@@ -135,7 +130,7 @@ export function MobileNav() {
             </div>
 
             <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-              {NAV_SECTIONS.map((section) => (
+              {sections.map((section) => (
                 <div key={section.title}>
                   <div className="px-2.5 pb-1 pt-3.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                     {section.title}

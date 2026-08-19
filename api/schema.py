@@ -17,17 +17,17 @@ from .billing import BillingService
 from .fees import FeeError, FeeService
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
-    FoodPreference, Gender, Inquiry, InquirySource, InquiryStatus, Invoice,
-    InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt, Room,
-    SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
+    FollowUp, FoodPreference, Gender, Inquiry, InquirySource, InquiryStatus,
+    Invoice, InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
+    Room, SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
     VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
-    AdditionalChargeType, AdmissionType, BedType, FeeType, InquiryType,
-    InvoiceType, PatientType, PaymentAccountType, PaymentReceiptType,
-    PaymentType, RoomType, TagType, UserType, VitalReadingType,
-    VitalsThresholdType,
+    AdditionalChargeType, AdmissionType, BedType, FeeType, FollowUpType,
+    InquiryType, InvoiceType, PatientType, PaymentAccountType,
+    PaymentReceiptType, PaymentType, RoomType, TagType, UserType,
+    VitalReadingType, VitalsThresholdType,
 )
 
 
@@ -213,6 +213,16 @@ class CreateInquiryInput:
     source: InquirySourceEnum
     phone: Optional[str] = ""
     notes: Optional[str] = ""
+
+
+@strawberry.input
+class CreateFollowUpInput:
+    """A dated follow-up reminder for a patient. `admission` is optional (the
+    follow-up may outlive a specific admission). Starts not-done."""
+    patient_id: strawberry.ID
+    follow_up_date: date
+    note: Optional[str] = ""
+    admission_id: Optional[strawberry.ID] = None
 
 
 # Number of days before an invoice's period end that we flag it "due soon".
@@ -779,9 +789,10 @@ class Query:
         return build_pending_dues()
 
     # Discharged admissions, optionally filtered to patients carrying a given
-    # tag, sorted by discharge date (newest first by default). ADMIN + FINANCE.
+    # tag, sorted by discharge date (newest first by default). ADMIN + FINANCE
+    # + PRO (PROs work follow-ups off the discharged list).
     @strawberry.field
-    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.PRO)
     def discharged_list(
         self, info: Info, tag: Optional[str] = None, sort_desc: bool = True
     ) -> List[DischargedPatientItem]:
@@ -833,6 +844,40 @@ class Query:
         if term:
             qs = qs.filter(Q(name__icontains=term) | Q(phone__icontains=term))
         return qs.order_by('-created_at', '-id')
+
+    # --- PRM: follow-ups (PRO manages, ADMIN views) ------------------------
+    # Follow-ups for one patient, soonest date first. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def follow_ups(
+        self, info: Info, patient_id: strawberry.ID
+    ) -> List[FollowUpType]:
+        return (
+            FollowUp.objects
+            .filter(patient_id=patient_id)
+            .select_related('patient', 'admission', 'created_by')
+            .order_by('follow_up_date', 'id')
+        )
+
+    # Outstanding follow-ups that are due (date on/before today and not yet
+    # done) — the source for the notification bell. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def due_follow_ups(self, info: Info) -> List[FollowUpType]:
+        return (
+            FollowUp.objects
+            .filter(is_done=False, follow_up_date__lte=_today())
+            .select_related('patient', 'admission', 'created_by')
+            .order_by('follow_up_date', 'id')
+        )
+
+    # Count of due follow-ups, for the bell badge. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def due_follow_up_count(self, info: Info) -> int:
+        return FollowUp.objects.filter(
+            is_done=False, follow_up_date__lte=_today()
+        ).count()
 
     # --- ADMIN + NURSE (clinical data) -------------------------------------
     @strawberry.field
@@ -1780,6 +1825,52 @@ class Mutation:
         inquiry.status = InquiryStatus.CONVERTED
         inquiry.save(update_fields=['patient', 'status', 'updated_at'])
         return inquiry
+
+    # --- PRM: follow-up writes (PRO only; ADMIN is view-only) --------------
+    # Schedule a follow-up for a patient. Stamped with the creating PRO. The
+    # follow_up_date may be in the past (logging a missed one). PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def create_follow_up(
+        self, info: Info, data: CreateFollowUpInput
+    ) -> FollowUpType:
+        try:
+            patient = Patient.objects.get(pk=data.patient_id)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
+        admission = None
+        if data.admission_id is not None:
+            try:
+                admission = Admission.objects.get(
+                    pk=data.admission_id, patient=patient
+                )
+            except Admission.DoesNotExist:
+                raise GraphQLError(
+                    'Admission not found for this patient.'
+                )
+        return FollowUp.objects.create(
+            patient=patient,
+            admission=admission,
+            note=(data.note or '').strip(),
+            follow_up_date=data.follow_up_date,
+            created_by=info.context.request.user,
+        )
+
+    # Mark a follow-up done (clears it from the due list / bell). Idempotent —
+    # marking an already-done one is a no-op. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def mark_follow_up_done(
+        self, info: Info, follow_up_id: strawberry.ID
+    ) -> FollowUpType:
+        try:
+            follow_up = FollowUp.objects.get(pk=follow_up_id)
+        except FollowUp.DoesNotExist:
+            raise GraphQLError('Follow-up not found.')
+        if not follow_up.is_done:
+            follow_up.is_done = True
+            follow_up.save(update_fields=['is_done'])
+        return follow_up
 
 
 schema = strawberry.Schema(

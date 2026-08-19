@@ -639,3 +639,112 @@ export const DISCHARGE_PATIENT = gql`
     }
   }
 `;
+
+// --- PRM: inquiries -------------------------------------------------------
+
+export const INQUIRIES = gql`
+  query Inquiries($status: InquiryStatusEnum, $search: String) {
+    inquiries(status: $status, search: $search) {
+      id
+      name
+      phone
+      source
+      status
+      notes
+      createdAt
+      patient {
+        id
+        patientId
+        name
+      }
+    }
+  }
+`;
+
+export const CREATE_INQUIRY = gql`
+  mutation CreateInquiry($data: CreateInquiryInput!) {
+    createInquiry(data: $data) {
+      id
+    }
+  }
+`;
+
+export const UPDATE_INQUIRY_STATUS = gql`
+  mutation UpdateInquiryStatus($id: ID!, $status: InquiryStatusEnum!) {
+    updateInquiryStatus(inquiryId: $id, status: $status) {
+      id
+      status
+    }
+  }
+`;
+
+export const LINK_INQUIRY_TO_PATIENT = gql`
+  mutation LinkInquiryToPatient($id: ID!, $patientId: ID!) {
+    linkInquiryToPatient(inquiryId: $id, patientId: $patientId) {
+      id
+      status
+      patient {
+        id
+        patientId
+        name
+      }
+    }
+  }
+`;
+
+// --- PRM: follow-ups ------------------------------------------------------
+
+export const FOLLOW_UPS = gql`
+  query FollowUps($patientId: ID!) {
+    followUps(patientId: $patientId) {
+      id
+      note
+      followUpDate
+      isDone
+      admission {
+        id
+      }
+    }
+  }
+`;
+
+export const DUE_FOLLOW_UPS = gql`
+  query DueFollowUps {
+    dueFollowUps {
+      id
+      note
+      followUpDate
+      patient {
+        id
+        patientId
+        name
+      }
+    }
+  }
+`;
+
+export const DUE_FOLLOW_UP_COUNT = gql`
+  query DueFollowUpCount {
+    dueFollowUpCount
+  }
+`;
+
+export const CREATE_FOLLOW_UP = gql`
+  mutation CreateFollowUp($data: CreateFollowUpInput!) {
+    createFollowUp(data: $data) {
+      id
+      note
+      followUpDate
+      isDone
+    }
+  }
+`;
+
+export const MARK_FOLLOW_UP_DONE = gql`
+  mutation MarkFollowUpDone($id: ID!) {
+    markFollowUpDone(followUpId: $id) {
+      id
+      isDone
+    }
+  }
+`;

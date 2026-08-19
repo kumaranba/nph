@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 
-export type Role = "ADMIN" | "FINANCE" | "NURSE";
+export type Role = "ADMIN" | "FINANCE" | "NURSE" | "PRO";
 
 export type Me = {
   id: string;
@@ -31,4 +31,5 @@ export const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Administrator",
   FINANCE: "Finance",
   NURSE: "Nursing",
+  PRO: "Patient Relations",
 };

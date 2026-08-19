@@ -1,7 +1,8 @@
 "use client";
 
-import { Bell, Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 
+import { NotificationBell } from "@/components/notification-bell";
 import { Input } from "@/components/ui/input";
 import { useMe, ROLE_LABEL } from "@/lib/me-context";
 
@@ -29,10 +30,7 @@ export function AppTopbar({ title }: { title: string }) {
         </span>
       ) : null}
 
-      <button className="relative flex h-9 w-9 items-center justify-center rounded-lg border bg-background transition-colors hover:bg-accent">
-        <Bell className="h-[17px] w-[17px] text-muted-foreground" />
-        <span className="absolute right-2 top-2 h-[7px] w-[7px] rounded-full border-2 border-background bg-red-500" />
-      </button>
+      <NotificationBell />
     </header>
   );
 }

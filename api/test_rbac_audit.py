@@ -32,6 +32,11 @@ OPERATIONS = [
     ("systemSettings", "{ systemSettings { feeDueWarningDays } }", {"ADMIN"}),
     # --- Queries: ADMIN + PRO (PRM) ---------------------------------------
     ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
+    ("followUps", '{ followUps(patientId: "1") { id } }', {"ADMIN", "PRO"}),
+    ("dueFollowUps", "{ dueFollowUps { id } }", {"ADMIN", "PRO"}),
+    ("dueFollowUpCount", "{ dueFollowUpCount }", {"ADMIN", "PRO"}),
+    # Discharged list is shared with PRO (they follow up discharged patients).
+    ("dischargedList", "{ dischargedList { id } }", {"ADMIN", "FINANCE", "PRO"}),
     # --- Queries: ADMIN + FINANCE -----------------------------------------
     ("invoices", "{ invoices { id } }", {"ADMIN", "FINANCE"}),
     ("payments", "{ payments { id } }", {"ADMIN", "FINANCE"}),
@@ -127,6 +132,17 @@ OPERATIONS = [
     (
         "linkInquiryToPatient",
         'mutation { linkInquiryToPatient(inquiryId: "999999", patientId: "1") { id } }',
+        {"PRO"},
+    ),
+    (
+        "createFollowUp",
+        'mutation { createFollowUp(data: {patientId: "999999",'
+        ' followUpDate: "2026-01-01"}) { id } }',
+        {"PRO"},
+    ),
+    (
+        "markFollowUpDone",
+        'mutation { markFollowUpDone(followUpId: "999999") { id } }',
         {"PRO"},
     ),
 ]

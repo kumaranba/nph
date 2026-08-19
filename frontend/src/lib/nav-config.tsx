@@ -2,9 +2,11 @@ import {
   Activity,
   Banknote,
   Building2,
+  CalendarClock,
   HeartPulse,
   History,
   LayoutDashboard,
+  MessageSquarePlus,
   Receipt,
   UserMinus,
   Search,
@@ -14,13 +16,37 @@ import {
   Wallet,
 } from "lucide-react";
 
+import type { Role } from "@/lib/me-context";
+
 export type NavItem = {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
+  // Roles allowed to see this item. Omitted = the three operational roles
+  // (Admin, Finance, Nurse) — i.e. everything the app had before PRM. PRO is
+  // scoped, so PRO only sees items that name it explicitly.
+  roles?: Role[];
 };
 export type NavSection = { title: string; items: NavItem[] };
+
+// Default audience for an item with no explicit `roles`: preserves the
+// pre-PRM behaviour (all three operational roles see it, PRO does not).
+export const DEFAULT_ROLES: Role[] = ["ADMIN", "FINANCE", "NURSE"];
+
+/** Whether `role` may see this nav item. */
+export function itemVisibleTo(item: NavItem, role: string | undefined): boolean {
+  const allowed = item.roles ?? DEFAULT_ROLES;
+  return allowed.includes(role as Role);
+}
+
+/** Sections with their items filtered for `role`; empty sections dropped. */
+export function navSectionsFor(role: string | undefined): NavSection[] {
+  return NAV_SECTIONS.map((s) => ({
+    ...s,
+    items: s.items.filter((i) => itemVisibleTo(i, role)),
+  })).filter((s) => s.items.length > 0);
+}
 
 // Single source of truth for the sidebar and the mobile nav drawer.
 // Routes mirror the app/ file tree.
@@ -32,9 +58,39 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Patients",
     items: [
-      { label: "Search", href: "/search", icon: Search },
+      // Search is shared with PRO (they look patients up to convert inquiries
+      // and schedule follow-ups).
+      {
+        label: "Search",
+        href: "/search",
+        icon: Search,
+        roles: ["ADMIN", "FINANCE", "NURSE", "PRO"],
+      },
       { label: "New admission", href: "/admissions/new", icon: UserPlus },
-      { label: "Discharged", href: "/discharged", icon: UserMinus },
+      // PRO sees Discharged too — they work follow-ups off this list.
+      {
+        label: "Discharged",
+        href: "/discharged",
+        icon: UserMinus,
+        roles: ["ADMIN", "FINANCE", "PRO"],
+      },
+    ],
+  },
+  {
+    title: "Patient Relations",
+    items: [
+      {
+        label: "Inquiries",
+        href: "/inquiries",
+        icon: MessageSquarePlus,
+        roles: ["PRO", "ADMIN"],
+      },
+      {
+        label: "Follow-ups",
+        href: "/follow-ups",
+        icon: CalendarClock,
+        roles: ["PRO", "ADMIN"],
+      },
     ],
   },
   {
