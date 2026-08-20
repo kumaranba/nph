@@ -57,6 +57,17 @@ OPERATIONS = [
     ("feeHistory", '{ feeHistory(patientId: "1") { id } }', {"ADMIN", "FINANCE"}),
     ("foodRates", "{ foodRates { id } }", {"ADMIN", "FINANCE"}),
     ("currentFoodRate", "{ currentFoodRate { id } }", {"ADMIN", "FINANCE"}),
+    (
+        "foodVendorList",
+        '{ foodVendorList(dateFrom: "2026-01-01", dateTo: "2026-01-02")'
+        " { totalPatientDays } }",
+        {"ADMIN", "FINANCE"},
+    ),
+    (
+        "patientFoodReport",
+        '{ patientFoodReport(month: "2026-01") { month } }',
+        {"ADMIN", "FINANCE"},
+    ),
     # --- Queries: ADMIN + NURSE -------------------------------------------
     ("vitalReadings", "{ vitalReadings { id } }", {"ADMIN", "NURSE"}),
     ("vitalHistory", '{ vitalHistory(patientId: "1") { id } }', {"ADMIN", "NURSE"}),
