@@ -940,3 +940,46 @@ export const SET_STAFF_MEAL_RATE = gql`
     }
   }
 `;
+
+// --- Canteen meal count report --------------------------------------------
+
+export const CANTEEN_REPORT = gql`
+  query CanteenReport($month: String) {
+    canteenReport(month: $month) {
+      month
+      dailyRate
+      staffMonthlyRate
+      activeStaff
+      hasOther
+      patientCost
+      staffCost
+      grandTotalCost
+      totals {
+        malePatients
+        femalePatients
+        otherPatients
+        maleStaff
+        femaleStaff
+        otherStaff
+        patientDays
+        staffDays
+        total
+      }
+      days {
+        day
+        dow
+        isSplit
+        malePatients
+        malePatientsNonveg
+        femalePatients
+        femalePatientsNonveg
+        otherPatients
+        otherPatientsNonveg
+        maleStaff
+        femaleStaff
+        otherStaff
+        total
+      }
+    }
+  }
+`;
