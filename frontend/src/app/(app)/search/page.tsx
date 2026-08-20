@@ -33,7 +33,7 @@ type SearchRow = {
   admissionDate: string | null;
   room: string | null;
   bed: string | null;
-  feeStatus: "CURRENT" | "DUE_SOON" | "OVERDUE";
+  feeStatus: "CURRENT" | "DUE_SOON" | "OVERDUE" | "NIL";
   tags: string[];
 };
 
@@ -47,10 +47,12 @@ const FEE_BADGE: Record<
   CURRENT: { label: "Current", className: "bg-green-100 text-green-800" },
   DUE_SOON: { label: "Due Soon", className: "bg-amber-100 text-amber-800" },
   OVERDUE: { label: "Overdue", className: "bg-red-100 text-red-800" },
+  // Discharged patient with nothing owed.
+  NIL: { label: "Nil", className: "bg-zinc-100 text-zinc-600" },
 };
 
 function FeeBadge({ status }: { status: SearchRow["feeStatus"] }) {
-  const badge = FEE_BADGE[status];
+  const badge = FEE_BADGE[status] ?? FEE_BADGE.NIL;
   return (
     <span
       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}
