@@ -21,15 +21,16 @@ from .models import (
     Attendance, AttendanceStatus, FollowUp, FoodPreference, FoodRate, Gender,
     Inquiry, InquirySource, InquiryStatus, Invoice, InvoiceStatus, Patient,
     Payment, PaymentAccount, PaymentReceipt, Room, Staff, StaffDesignation,
-    SystemSetting, Tag, TagCategory, User, UserRole, VitalReading,
-    VitalsThreshold,
+    StaffMealRate, SystemSetting, Tag, TagCategory, User, UserRole,
+    VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
     AdditionalChargeType, AdmissionType, AttendanceType, BedType, FeeType,
     FollowUpType, FoodRateType, InquiryType, InvoiceType, PatientType,
-    PaymentAccountType, PaymentReceiptType, PaymentType, RoomType, StaffType,
-    TagType, UserType, VitalReadingType, VitalsThresholdType,
+    PaymentAccountType, PaymentReceiptType, PaymentType, RoomType,
+    StaffMealRateType, StaffType, TagType, UserType, VitalReadingType,
+    VitalsThresholdType,
 )
 
 
@@ -244,6 +245,7 @@ class CreateStaffInput:
     OTHER. staff_code is auto-assigned."""
     name: str
     designation: Optional[StaffDesignationEnum] = None
+    gender: Optional[GenderEnum] = None
     phone: Optional[str] = ""
     joined_on: Optional[date] = None
 
@@ -253,6 +255,7 @@ class UpdateStaffInput:
     """Partial update of a staff member. Unset fields are left unchanged."""
     name: Optional[str] = strawberry.UNSET
     designation: Optional[StaffDesignationEnum] = strawberry.UNSET
+    gender: Optional[GenderEnum] = strawberry.UNSET
     phone: Optional[str] = strawberry.UNSET
     joined_on: Optional[date] = strawberry.UNSET
     is_active: Optional[bool] = strawberry.UNSET
@@ -838,6 +841,19 @@ class Query:
     @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def current_food_rate(self, info: Info) -> Optional[FoodRateType]:
         return FoodRate.rate_on(_today())
+
+    # --- Canteen: staff monthly meal rate (ADMIN + FINANCE) ---------------
+    # Full staff-meal-rate history, newest effective_from first. ADMIN+FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def staff_meal_rates(self, info: Info) -> List[StaffMealRateType]:
+        return StaffMealRate.objects.all()
+
+    # The staff monthly meal rate in force today (None if unset). ADMIN+FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def current_staff_meal_rate(self, info: Info) -> Optional[StaffMealRateType]:
+        return StaffMealRate.rate_on(_today())
 
     # Daily food vendor payment list over an inclusive date range (end clamped
     # to today). Patient-days that day × the day's rate. ADMIN + FINANCE.
@@ -2059,6 +2075,7 @@ class Mutation:
                 data.designation.value if data.designation is not None
                 else StaffDesignation.OTHER
             ),
+            gender=data.gender.value if data.gender is not None else '',
             phone=(data.phone or '').strip(),
             joined_on=data.joined_on,
         )
@@ -2085,6 +2102,9 @@ class Mutation:
         if data.designation is not strawberry.UNSET and data.designation is not None:
             staff.designation = data.designation.value
             fields.append('designation')
+        if data.gender is not strawberry.UNSET:
+            staff.gender = data.gender.value if data.gender is not None else ''
+            fields.append('gender')
         if data.phone is not strawberry.UNSET:
             staff.phone = (data.phone or '').strip()
             fields.append('phone')
@@ -2176,6 +2196,28 @@ class Mutation:
             raise GraphQLError('Food rate cannot be negative.')
         eff = effective_from or _today()
         return FoodRate.objects.create(
+            amount=amount,
+            effective_from=eff,
+            note=(note or '').strip(),
+            created_by=info.context.request.user,
+        )
+
+    # Set the monthly staff canteen meal rate from a date. Adds a new
+    # effective-dated row (history preserved). Non-negative; effective_from
+    # defaults to today. ADMIN + FINANCE.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def set_staff_meal_rate(
+        self,
+        info: Info,
+        amount: Decimal,
+        effective_from: Optional[date] = None,
+        note: Optional[str] = "",
+    ) -> StaffMealRateType:
+        if amount < 0:
+            raise GraphQLError('Staff meal rate cannot be negative.')
+        eff = effective_from or _today()
+        return StaffMealRate.objects.create(
             amount=amount,
             effective_from=eff,
             note=(note or '').strip(),

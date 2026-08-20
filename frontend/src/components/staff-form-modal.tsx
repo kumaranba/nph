@@ -19,11 +19,19 @@ export const DESIGNATIONS: Array<{ value: string; label: string }> = [
   { value: "OTHER", label: "Other" },
 ];
 
+export const GENDERS: Array<{ value: string; label: string }> = [
+  { value: "", label: "—" },
+  { value: "MALE", label: "Male" },
+  { value: "FEMALE", label: "Female" },
+  { value: "OTHER", label: "Other" },
+];
+
 export type StaffRow = {
   id: string;
   staffCode: string;
   name: string;
   designation: string;
+  gender: string;
   phone: string;
   isActive: boolean;
   joinedOn: string | null;
@@ -32,6 +40,7 @@ export type StaffRow = {
 type StaffForm = {
   name: string;
   designation: string;
+  gender: string;
   phone: string;
   joinedOn: string;
 };
@@ -50,6 +59,7 @@ export function StaffFormModal({
     defaultValues: {
       name: staff?.name ?? "",
       designation: staff?.designation ?? "OTHER",
+      gender: staff?.gender ?? "",
       phone: staff?.phone ?? "",
       joinedOn: staff?.joinedOn ?? "",
     },
@@ -84,6 +94,8 @@ export function StaffFormModal({
     const payload = {
       name: values.name,
       designation: values.designation,
+      // Empty gender → null (the enum input rejects ""); clears it on update.
+      gender: values.gender || null,
       phone: values.phone,
       joinedOn: values.joinedOn || null,
     };
@@ -143,6 +155,23 @@ export function StaffFormModal({
                 </option>
               ))}
             </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="st-gender">Gender</Label>
+            <select
+              id="st-gender"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              {...register("gender")}
+            >
+              {GENDERS.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Used for the canteen meal count (Male / Female split).
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="st-phone">Phone (optional)</Label>
