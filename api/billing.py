@@ -6,8 +6,9 @@ admitted on the 31st is billed on Feb 28/29, Apr 30, etc.). A billing period
 runs from one cycle date up to the day before the next.
 """
 import calendar
+from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from django.db.models import Sum
@@ -19,6 +20,12 @@ from .models import (
     Invoice,
     InvoiceStatus,
 )
+
+_CENT = Decimal("0.01")
+
+
+def _money(value) -> Decimal:
+    return Decimal(value).quantize(_CENT, rounding=ROUND_HALF_UP)
 
 
 class BillingService:
@@ -488,3 +495,179 @@ class BillingService:
             admission.save(update_fields=["credit_balance"])
 
         return receipt, allocations, credit_added
+
+    # --------------------------------------------------- discharge pro-ration
+    @classmethod
+    def current_cycle_invoice(cls, admission, on_date: date):
+        """The monthly invoice for the billing period containing ``on_date``
+        (excludes opening-balance and settlement invoices). None if not billed
+        yet."""
+        start, end = cls._period_for(admission.admission_date, on_date)
+        return admission.invoices.filter(
+            billing_period_start=start, billing_period_end=end,
+            is_opening_balance=False, is_settlement=False,
+        ).first()
+
+    @staticmethod
+    def prorate(full_fee: Decimal, period_start: date, period_end: date,
+                discharge_date: date):
+        """Pro-rate ``full_fee`` for a stay ending on ``discharge_date`` within
+        a billing period. The stay is counted from the period start through the
+        discharge day, **both inclusive**. Returns
+        ``(days_in_period, days_stayed, prorated_fee, cancelled)``."""
+        days_in_period = (period_end - period_start).days + 1
+        days_stayed = (discharge_date - period_start).days + 1     # inclusive
+        days_stayed = max(0, min(days_stayed, days_in_period))
+        prorated = _money(Decimal(full_fee) * days_stayed / days_in_period)
+        return days_in_period, days_stayed, prorated, _money(Decimal(full_fee) - prorated)
+
+    @classmethod
+    def _period_charges(cls, admission, start, end) -> Decimal:
+        return (
+            AdditionalCharge.objects.filter(
+                admission=admission, charge_date__gte=start, charge_date__lte=end,
+            ).aggregate(total=Sum("amount"))["total"]
+            or Decimal("0")
+        )
+
+    @classmethod
+    @transaction.atomic
+    def apply_discharge_proration(cls, admission, discharge_date: date) -> Decimal:
+        """Reduce the in-progress cycle's invoice to the days actually stayed.
+
+        Generates the current-period invoice first if Celery hasn't yet, then
+        rewrites its fee line to the pro-rated amount (charges are untouched).
+        Only an invoice that already exists for the in-progress cycle is
+        adjusted — if billing hasn't raised one yet, there is nothing to
+        pro-rate. Idempotent: the pro-ration is computed from the immutable fee
+        snapshot, so re-running yields the same result. Returns the cancelled
+        amount.
+        """
+        inv = cls.current_cycle_invoice(admission, discharge_date)
+        if inv is None:      # not billed for this cycle — nothing to pro-rate
+            return Decimal("0")
+
+        _, _, prorated, cancelled = cls.prorate(
+            inv.fee.amount, inv.billing_period_start, inv.billing_period_end,
+            discharge_date,
+        )
+        if cancelled <= 0:
+            return Decimal("0")
+        charges = cls._period_charges(
+            admission, inv.billing_period_start, inv.billing_period_end
+        )
+        inv.base_fee = prorated
+        inv.total_due = prorated + charges
+        inv.save(update_fields=["base_fee", "total_due"])
+        cls.recompute_status(inv)
+        return cancelled
+
+
+# ------------------------------------------------------- discharge preview
+@dataclass
+class DischargeLine:
+    label: str
+    kind: str            # 'fee' | 'charge' | 'opening' | 'settlement'
+    amount: Decimal      # balance still due on this line
+
+
+@dataclass
+class DischargePreview:
+    discharge_date: date
+    # Current in-progress cycle (None if there isn't one to pro-rate).
+    has_current_cycle: bool = False
+    cycle_start: date = None
+    cycle_end: date = None
+    full_fee: Decimal = Decimal("0")
+    days_in_period: int = 0
+    days_stayed: int = 0
+    prorated_fee: Decimal = Decimal("0")
+    cancelled_fee: Decimal = Decimal("0")
+    lines: list = field(default_factory=list)
+    fees_due: Decimal = Decimal("0")
+    charges_due: Decimal = Decimal("0")
+    total_due_now: Decimal = Decimal("0")
+
+
+def build_discharge_preview(admission, discharge_date: date) -> DischargePreview:
+    """Compute — without mutating anything — what the patient owes if discharged
+    on ``discharge_date``, with the current cycle's fee pro-rated to the days
+    stayed. Itemises every outstanding line (fees + each additional charge)."""
+    pv = DischargePreview(discharge_date=discharge_date)
+    cur = BillingService.current_cycle_invoice(admission, discharge_date)
+    cur_start, cur_end = BillingService._period_for(
+        admission.admission_date, discharge_date
+    )
+    covered = (
+        admission.opening_balance_as_of is not None
+        and cur_start <= admission.opening_balance_as_of
+    )
+
+    # --- current in-progress cycle: pro-rated fee for the days stayed --------
+    # Only when the cycle has actually been billed — no invoice, nothing owed.
+    if cur is not None and not covered and discharge_date >= admission.admission_date:
+        full_fee = cur.fee.amount
+        days_in, stayed, prorated, cancelled = BillingService.prorate(
+            full_fee, cur_start, cur_end, discharge_date
+        )
+        pv.has_current_cycle = True
+        pv.cycle_start, pv.cycle_end = cur_start, cur_end
+        pv.full_fee, pv.days_in_period, pv.days_stayed = full_fee, days_in, stayed
+        pv.prorated_fee, pv.cancelled_fee = prorated, cancelled
+
+        cur_paid = (
+            BillingService.amount_paid(cur) + (cur.refund_amount or Decimal("0"))
+            if cur is not None else Decimal("0")
+        )
+        cur_charges = BillingService._period_charges(admission, cur_start, cur_end)
+        # Fee still owed for this period after any payment already applied.
+        fee_bal = max(Decimal("0"), prorated - max(Decimal("0"), cur_paid - cur_charges))
+        if prorated > 0:
+            pv.lines.append(DischargeLine(
+                f"Fee {cur_start:%d-%m-%Y} → {discharge_date:%d-%m-%Y} "
+                f"({stayed}/{days_in} days, pro-rated)", "fee", fee_bal))
+        pv.fees_due += fee_bal
+        for ch in AdditionalCharge.objects.filter(
+            admission=admission, charge_date__gte=cur_start, charge_date__lte=cur_end,
+        ).order_by("charge_date"):
+            pv.lines.append(DischargeLine(
+                f"{ch.get_category_display()} {ch.charge_date:%d-%m-%Y}",
+                "charge", ch.amount))
+        # Charges owed for this period after payment (charges settle first).
+        pv.charges_due += min(cur_charges, max(Decimal("0"), cur_charges + prorated - cur_paid))
+
+    # --- all other outstanding invoices (older months, opening balance) -----
+    for inv in admission.invoices.filter(
+        status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+    ).order_by("billing_period_start"):
+        if (inv.billing_period_start == cur_start
+                and inv.billing_period_end == cur_end
+                and not inv.is_opening_balance and not inv.is_settlement):
+            continue  # already handled above as the current cycle
+        bal = BillingService.balance_due(inv)
+        if bal <= 0:
+            continue
+        if inv.is_opening_balance:
+            pv.lines.append(DischargeLine("Opening balance", "opening", bal))
+            pv.fees_due += bal
+            continue
+        charges = BillingService._period_charges(
+            admission, inv.billing_period_start, inv.billing_period_end)
+        charge_bal = min(bal, charges)
+        fee_bal = bal - charge_bal
+        period = f"{inv.billing_period_start:%d-%m-%Y}"
+        if fee_bal > 0:
+            pv.lines.append(DischargeLine(f"Fee {period}", "fee", fee_bal))
+        for ch in AdditionalCharge.objects.filter(
+            admission=admission,
+            charge_date__gte=inv.billing_period_start,
+            charge_date__lte=inv.billing_period_end,
+        ).order_by("charge_date"):
+            pv.lines.append(DischargeLine(
+                f"{ch.get_category_display()} {ch.charge_date:%d-%m-%Y}",
+                "charge", ch.amount))
+        pv.fees_due += fee_bal
+        pv.charges_due += charge_bal
+
+    pv.total_due_now = pv.fees_due + pv.charges_due
+    return pv

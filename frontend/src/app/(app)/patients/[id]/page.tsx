@@ -320,8 +320,6 @@ export default function PatientProfilePage() {
           patientId={patient.id}
           patientName={patient.name}
           role={role}
-          hasOutstandingDues={activeAdmission.hasOutstandingDues}
-          outstandingInvoiceCount={activeAdmission.outstandingInvoiceCount}
           onClose={() => setShowDischarge(false)}
         />
       ) : null}

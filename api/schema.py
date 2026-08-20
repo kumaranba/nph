@@ -13,7 +13,7 @@ from strawberry.types import Info
 from strawberry_django.optimizer import DjangoOptimizerExtension
 
 from . import auth, dashboard, vitals
-from .billing import BillingService
+from .billing import BillingService, build_discharge_preview
 from .fees import FeeError, FeeService
 from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
@@ -185,6 +185,34 @@ class DischargeResult:
     has_outstanding_dues: bool
     outstanding_invoice_count: int
     refund_amount: Decimal
+
+
+@strawberry.type
+class DischargeLineType:
+    """One itemised line of the discharge preview (a fee or a charge)."""
+    label: str
+    kind: str            # fee | charge | opening | settlement
+    amount: Decimal      # balance still due
+
+
+@strawberry.type
+class DischargePreviewType:
+    """What a patient owes if discharged on ``discharge_date`` — the current
+    cycle's fee pro-rated to the days stayed, plus every other outstanding line.
+    Read-only: computing a preview changes nothing."""
+    discharge_date: date
+    has_current_cycle: bool
+    cycle_start: Optional[date]
+    cycle_end: Optional[date]
+    full_fee: Decimal
+    days_in_period: int
+    days_stayed: int
+    prorated_fee: Decimal
+    cancelled_fee: Decimal
+    lines: List[DischargeLineType]
+    fees_due: Decimal
+    charges_due: Decimal
+    total_due_now: Decimal
 
 
 @strawberry.input
@@ -1079,6 +1107,42 @@ class Query:
             return build_account_statement(patient_id, date_from, date_to)
         except Patient.DoesNotExist:
             raise GraphQLError('Patient not found.')
+
+    # Preview a discharge: the pro-rated current-cycle fee for the days stayed,
+    # every outstanding line itemised, and the total to settle before the
+    # patient can be discharged. Read-only. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def discharge_preview(
+        self, info: Info, admission_id: strawberry.ID,
+        discharge_date: Optional[date] = None,
+    ) -> DischargePreviewType:
+        try:
+            admission = Admission.objects.get(pk=admission_id)
+        except Admission.DoesNotExist:
+            raise GraphQLError('Admission not found.')
+        d = discharge_date or _today()
+        if d < admission.admission_date:
+            raise GraphQLError('Discharge date cannot precede the admission date.')
+        pv = build_discharge_preview(admission, d)
+        return DischargePreviewType(
+            discharge_date=pv.discharge_date,
+            has_current_cycle=pv.has_current_cycle,
+            cycle_start=pv.cycle_start,
+            cycle_end=pv.cycle_end,
+            full_fee=pv.full_fee,
+            days_in_period=pv.days_in_period,
+            days_stayed=pv.days_stayed,
+            prorated_fee=pv.prorated_fee,
+            cancelled_fee=pv.cancelled_fee,
+            lines=[
+                DischargeLineType(label=ln.label, kind=ln.kind, amount=ln.amount)
+                for ln in pv.lines
+            ],
+            fees_due=pv.fees_due,
+            charges_due=pv.charges_due,
+            total_due_now=pv.total_due_now,
+        )
 
     # A patient's invoice for a single billing month. `period` is "YYYY-MM";
     # `patient_id` is the patient's primary key. ADMIN + FINANCE.
@@ -2039,16 +2103,22 @@ class Mutation:
             patient.tags.remove(existing)
         return patient
 
-    # Discharge a patient: mark the admission DISCHARGED and free the bed.
-    # ADMIN and FINANCE may discharge (NURSE may not). Only FINANCE may attach
-    # a refund_amount. Returns a warning flag when the patient still has
-    # outstanding (unpaid/partial) invoices.
+    # Discharge a patient: pro-rate the in-progress cycle to the days stayed,
+    # settle the balance, then mark the admission DISCHARGED and free the bed.
+    # ADMIN and FINANCE may discharge (NURSE may not). Only FINANCE may attach a
+    # refund_amount. Discharge is BLOCKED while any balance remains — an
+    # optional payment (fees_paid / charges_paid) is recorded first, and if the
+    # patient still owes anything the whole operation rolls back.
     @strawberry.mutation
     @require_roles(UserRole.ADMIN, UserRole.FINANCE)
     def discharge_patient(
         self,
         info: Info,
         admission_id: strawberry.ID,
+        discharge_date: Optional[date] = None,
+        fees_paid: Optional[Decimal] = None,
+        charges_paid: Optional[Decimal] = None,
+        account_id: Optional[strawberry.ID] = None,
         refund_amount: Optional[Decimal] = None,
         discharge_type: Optional[str] = None,
         discharge_notes: Optional[str] = None,
@@ -2061,6 +2131,12 @@ class Mutation:
                 raise GraphQLError('Only Finance can record a refund on discharge.')
             if refund_amount < 0:
                 raise GraphQLError('Refund amount cannot be negative.')
+
+        fees_paid = fees_paid or Decimal('0')
+        charges_paid = charges_paid or Decimal('0')
+        if fees_paid < 0 or charges_paid < 0:
+            raise GraphQLError('Payment amounts cannot be negative.')
+        account = _resolve_active_account(account_id) if account_id else None
 
         with transaction.atomic():
             try:
@@ -2075,17 +2151,31 @@ class Mutation:
             if admission.status == AdmissionStatus.DISCHARGED:
                 raise GraphQLError('Patient is already discharged.')
 
-            # Bill any additional charges that aren't on an invoice yet — after
-            # discharge no further invoices are generated, so this is the last
-            # chance to capture them.
-            BillingService.sweep_unbilled_charges(admission)
+            d = discharge_date or _today()
+            if d < admission.admission_date:
+                raise GraphQLError('Discharge date cannot precede the admission date.')
 
-            outstanding_count = admission.invoices.filter(
-                status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
-            ).count()
+            # Bill any unbilled charges (last chance after discharge), then
+            # pro-rate the in-progress cycle's fee down to the days stayed.
+            BillingService.sweep_unbilled_charges(admission)
+            BillingService.apply_discharge_proration(admission, d)
+
+            # Record the settling payment, if any (allocates oldest-first).
+            if fees_paid + charges_paid > 0:
+                BillingService.record_payment_for_admission(
+                    admission, fees_paid, charges_paid, d, user, account=account,
+                )
+
+            # Hard block: nothing may be left owing.
+            outstanding = BillingService.total_pending_dues(admission)
+            if outstanding > 0:
+                raise GraphQLError(
+                    f'Cannot discharge — ₹{outstanding:.2f} still outstanding. '
+                    f'Record full payment before discharging.'
+                )
 
             admission.status = AdmissionStatus.DISCHARGED
-            admission.discharge_date = date.today()
+            admission.discharge_date = d
             if discharge_type:
                 admission.discharge_type = discharge_type
             if discharge_notes:
@@ -2104,8 +2194,8 @@ class Mutation:
 
         return DischargeResult(
             admission=admission,
-            has_outstanding_dues=outstanding_count > 0,
-            outstanding_invoice_count=outstanding_count,
+            has_outstanding_dues=False,
+            outstanding_invoice_count=0,
             refund_amount=admission.refund_amount,
         )
 
