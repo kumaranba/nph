@@ -7,11 +7,13 @@ from django.http import HttpResponse, JsonResponse
 from strawberry.django.views import GraphQLView
 
 from .auth import get_user_from_request
+from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
 from .inquiry_import import ImportFileError, import_op_list
 from .models import Patient, PaymentReceipt, UserRole
 from .reports import (
     account_statement_pdf,
+    canteen_report_pdf,
     fees_due_pdf,
     food_vendor_list_pdf,
     patient_food_report_pdf,
@@ -225,6 +227,29 @@ def patient_food_report_pdf_view(request):
     response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = (
         f'attachment; filename="patient-food-{data.month}.pdf"'
+    )
+    return response
+
+
+def canteen_report_pdf_view(request):
+    """Download the monthly canteen meal count as a PDF. ADMIN + FINANCE.
+    Optional query param: month (YYYY-MM, defaults to the current month)."""
+    denied = _food_auth(request)
+    if denied is not None:
+        return denied
+    month = request.GET.get("month") or None
+    try:
+        data = build_canteen_report(month=month)
+    except (ValueError, IndexError):
+        return JsonResponse(
+            {"error": "month must be in YYYY-MM format."}, status=400
+        )
+    buffer = io.BytesIO()
+    canteen_report_pdf(buffer, data)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="canteen-{data.month}.pdf"'
     )
     return response
 

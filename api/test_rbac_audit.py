@@ -74,6 +74,11 @@ OPERATIONS = [
         '{ patientFoodReport(month: "2026-01") { month } }',
         {"ADMIN", "FINANCE"},
     ),
+    (
+        "canteenReport",
+        '{ canteenReport(month: "2026-01") { month } }',
+        {"ADMIN", "FINANCE"},
+    ),
     # --- Queries: ADMIN + NURSE -------------------------------------------
     ("vitalReadings", "{ vitalReadings { id } }", {"ADMIN", "NURSE"}),
     ("vitalHistory", '{ vitalHistory(patientId: "1") { id } }', {"ADMIN", "NURSE"}),

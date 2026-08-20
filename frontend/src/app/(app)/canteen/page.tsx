@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { CanteenReport } from "@/components/canteen-report";
 import { LinesSkeleton, QueryError } from "@/components/query-states";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +45,7 @@ export default function CanteenPage() {
   const router = useRouter();
   const me = useMe();
   const [showForm, setShowForm] = useState(false);
+  const [tab, setTab] = useState<"report" | "rate">("report");
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -110,7 +112,43 @@ export default function CanteenPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto min-h-screen max-w-4xl space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="flex gap-1 rounded-lg border bg-muted/40 p-1 text-sm">
+        {[
+          { k: "report", label: "Meal count" },
+          { k: "rate", label: "Staff rate" },
+        ].map((t) => (
+          <button
+            key={t.k}
+            type="button"
+            onClick={() => setTab(t.k as typeof tab)}
+            className={`flex-1 rounded-md px-3 py-1.5 font-medium transition-colors ${
+              tab === t.k
+                ? "bg-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "report" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Canteen meal count</CardTitle>
+            <CardDescription>
+              Daily patient &amp; staff meals for a month, with costs
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CanteenReport />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {tab === "rate" ? (
+      <>
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
@@ -268,6 +306,8 @@ export default function CanteenPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      ) : null}
     </main>
   );
 }

@@ -414,3 +414,99 @@ def patient_food_report_pdf(buffer, report):
         styles["sub"],
     ))
     doc.build(story)
+
+
+def canteen_report_pdf(buffer, report):
+    """Render the monthly canteen meal count (``CanteenReport``) into buffer.
+
+    A daily count table (Male/Female patient + staff, with a Veg/Non-veg patient
+    split on Wed & Sun) plus a cost summary. Landscape to fit the columns.
+    """
+    from reportlab.lib.pagesizes import landscape
+
+    styles = _build_styles()
+    show_other = report.has_other
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4),
+        topMargin=12 * mm, bottomMargin=12 * mm,
+        leftMargin=12 * mm, rightMargin=12 * mm,
+        title=f"Canteen Meal Count — {report.month}",
+    )
+    story = [
+        Paragraph("Nila Psychiatric Hospital", styles["title"]),
+        Paragraph(
+            f"Canteen Meal Count  |  {_fmt_month(report.month)}",
+            styles["sub"],
+        ),
+    ]
+
+    # Header: patient columns (Male/Female[/Other]) then staff columns.
+    head = ["Date", "Day", "Pat-M", "Pat-F"]
+    if show_other:
+        head.append("Pat-O")
+    head += ["Staff-M", "Staff-F"]
+    if show_other:
+        head.append("Staff-O")
+    head.append("Total")
+
+    def pcell(total, nonveg, is_split):
+        # "12" normally; "10/2" (veg/non-veg) on split days.
+        if is_split and nonveg:
+            return f"{total - nonveg}/{nonveg}"
+        return str(total)
+
+    rows = [head]
+    for d in report.days:
+        row = [
+            _fmt_date(d.day), d.dow,
+            pcell(d.male_patients, d.male_patients_nonveg, d.is_split),
+            pcell(d.female_patients, d.female_patients_nonveg, d.is_split),
+        ]
+        if show_other:
+            row.append(pcell(d.other_patients, d.other_patients_nonveg, d.is_split))
+        row += [str(d.male_staff), str(d.female_staff)]
+        if show_other:
+            row.append(str(d.other_staff))
+        row.append(str(d.total))
+        rows.append(row)
+
+    t = report.totals
+    total_row = ["Total", "",
+                 str(t.male_patients), str(t.female_patients)]
+    if show_other:
+        total_row.append(str(t.other_patients))
+    total_row += [str(t.male_staff), str(t.female_staff)]
+    if show_other:
+        total_row.append(str(t.other_staff))
+    total_row.append(str(t.total))
+    rows.append(total_row)
+
+    ncols = len(head)
+    table = Table(rows, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (2, 0), (-1, -1), "CENTER"),
+        ("LINEABOVE", (0, len(rows) - 1), (-1, len(rows) - 1), 0.6,
+         colors.HexColor("#1f2937")),
+        ("FONTNAME", (0, len(rows) - 1), (-1, len(rows) - 1), "Helvetica-Bold"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, len(rows) - 2),
+         [colors.white, colors.HexColor("#f3f4f6")]),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d1d5db")),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    story.append(table)
+
+    story.append(Paragraph(
+        "<br/>Wed &amp; Sun patient cells show Veg/Non-veg. "
+        f"Patient meals: {_rupee(report.patient_cost)} "
+        f"({t.patient_days} patient-days x daily rate).  "
+        f"Staff meals: {_rupee(report.staff_cost)} "
+        f"({report.active_staff} active staff x {_rupee(report.staff_monthly_rate)}/mo).  "
+        f"Grand total: {_rupee(report.grand_total_cost)}.",
+        styles["sub"],
+    ))
+    doc.build(story)

@@ -15,6 +15,7 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 from . import auth, dashboard, vitals
 from .billing import BillingService
 from .fees import FeeError, FeeService
+from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
 from .models import (
     AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
@@ -387,6 +388,62 @@ class PatientFoodReportType:
     groups: List[PatientFoodGroupType]
     grand_total_days: int
     grand_total_amount: Decimal
+
+
+@strawberry.type
+class CanteenDayType:
+    """One day of the canteen meal count. ``*_nonveg`` is the non-veg portion
+    of that gender's patients (0 on non-split days). Wednesdays & Sundays are
+    split days."""
+    day: date
+    dow: str
+    is_split: bool
+    male_patients: int
+    male_patients_nonveg: int
+    female_patients: int
+    female_patients_nonveg: int
+    other_patients: int
+    other_patients_nonveg: int
+    male_staff: int
+    female_staff: int
+    other_staff: int
+    patients: int
+    staff: int
+    total: int
+
+
+@strawberry.type
+class CanteenTotalsType:
+    """Month totals for the canteen count."""
+    male_patients: int
+    male_patients_nonveg: int
+    female_patients: int
+    female_patients_nonveg: int
+    other_patients: int
+    other_patients_nonveg: int
+    male_staff: int
+    female_staff: int
+    other_staff: int
+    patient_days: int
+    staff_days: int
+    total: int
+
+
+@strawberry.type
+class CanteenReportType:
+    """Monthly canteen meal count: a daily count table + totals + a cost
+    summary (patient meals at the daily food rate, staff at the flat monthly
+    rate × active staff)."""
+    month: str
+    daily_rate: Decimal
+    staff_monthly_rate: Decimal
+    active_staff: int
+    has_other: bool
+    days: List[CanteenDayType]
+    totals: CanteenTotalsType
+    patient_cost: Decimal
+    staff_cost: Decimal
+    grand_total_cost: Decimal
 
 
 @strawberry.type
@@ -914,6 +971,59 @@ class Query:
             ],
             grand_total_days=data.grand_total_days,
             grand_total_amount=data.grand_total_amount,
+        )
+
+    # Canteen meal count for a calendar month ('YYYY-MM', defaults to current):
+    # daily patient + staff counts (veg/non-veg patient split on Wed & Sun) plus
+    # a cost summary. ADMIN + FINANCE.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE)
+    def canteen_report(
+        self, info: Info, month: Optional[str] = None
+    ) -> CanteenReportType:
+        try:
+            data = build_canteen_report(month=month, today=_today())
+        except (ValueError, IndexError):
+            raise GraphQLError("month must be in 'YYYY-MM' format.")
+        return CanteenReportType(
+            month=data.month,
+            daily_rate=data.daily_rate,
+            staff_monthly_rate=data.staff_monthly_rate,
+            active_staff=data.active_staff,
+            has_other=data.has_other,
+            days=[
+                CanteenDayType(
+                    day=d.day, dow=d.dow, is_split=d.is_split,
+                    male_patients=d.male_patients,
+                    male_patients_nonveg=d.male_patients_nonveg,
+                    female_patients=d.female_patients,
+                    female_patients_nonveg=d.female_patients_nonveg,
+                    other_patients=d.other_patients,
+                    other_patients_nonveg=d.other_patients_nonveg,
+                    male_staff=d.male_staff,
+                    female_staff=d.female_staff,
+                    other_staff=d.other_staff,
+                    patients=d.patients, staff=d.staff, total=d.total,
+                )
+                for d in data.days
+            ],
+            totals=CanteenTotalsType(
+                male_patients=data.totals.male_patients,
+                male_patients_nonveg=data.totals.male_patients_nonveg,
+                female_patients=data.totals.female_patients,
+                female_patients_nonveg=data.totals.female_patients_nonveg,
+                other_patients=data.totals.other_patients,
+                other_patients_nonveg=data.totals.other_patients_nonveg,
+                male_staff=data.totals.male_staff,
+                female_staff=data.totals.female_staff,
+                other_staff=data.totals.other_staff,
+                patient_days=data.totals.patient_days,
+                staff_days=data.totals.staff_days,
+                total=data.totals.total,
+            ),
+            patient_cost=data.patient_cost,
+            staff_cost=data.staff_cost,
+            grand_total_cost=data.grand_total_cost,
         )
 
     # --- ADMIN + FINANCE (financial data) ----------------------------------
