@@ -24,7 +24,11 @@ mutation($aid: ID!, $cat: ChargeCategoryEnum!, $amt: Decimal!, $d: Date!, $desc:
 }
 """
 DELETE_CHARGE = "mutation($id: ID!) { deleteCharge(chargeId: $id) }"
-DISCHARGE = "mutation($aid: ID!) { dischargePatient(admissionId: $aid) { hasOutstandingDues } }"
+DISCHARGE = (
+    "mutation($aid: ID!, $fees: Decimal, $charges: Decimal) { "
+    "dischargePatient(admissionId: $aid, feesPaid: $fees, chargesPaid: $charges) "
+    "{ hasOutstandingDues } }"
+)
 STATEMENT = """
 query($pid: ID!) { accountStatement(patientId: $pid) {
   totalDebits closingBalance lines { description debit } } }
@@ -114,8 +118,12 @@ def test_discharge_sweeps_unbilled_charge(finance_client, db):
     )
     assert BillingService.total_pending_dues(a) == Decimal("10000")  # charge not reflected
 
-    finance_client.execute(DISCHARGE, {"aid": str(a.id)})
-    assert BillingService.total_pending_dues(a) == Decimal("10750")  # swept in
+    # Discharge sweeps the charge in (10000 fee + 750 charge); paying the full
+    # 10750 clears it so the discharge is allowed.
+    res = finance_client.execute(
+        DISCHARGE, {"aid": str(a.id), "fees": "10000", "charges": "750"})
+    assert res.get("errors") is None
+    assert BillingService.total_pending_dues(a) == Decimal("0")   # swept in and settled
 
 
 def test_delete_charge_reverses_topup_and_blocks_when_paid(finance_client, db):

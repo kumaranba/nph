@@ -48,6 +48,11 @@ OPERATIONS = [
     ("dueFollowUpCount", "{ dueFollowUpCount }", {"ADMIN", "PRO"}),
     # Discharged list is shared with PRO (they follow up discharged patients).
     ("dischargedList", "{ dischargedList { id } }", {"ADMIN", "FINANCE", "PRO"}),
+    (
+        "dischargePreview",
+        '{ dischargePreview(admissionId: "1") { totalDueNow } }',
+        {"ADMIN", "FINANCE"},
+    ),
     # --- Queries: ADMIN + FINANCE -----------------------------------------
     ("invoices", "{ invoices { id } }", {"ADMIN", "FINANCE"}),
     ("payments", "{ payments { id } }", {"ADMIN", "FINANCE"}),

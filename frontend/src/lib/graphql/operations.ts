@@ -625,11 +625,47 @@ export const RECORD_PATIENT_PAYMENT = gql`
   }
 `;
 
+export const DISCHARGE_PREVIEW = gql`
+  query DischargePreview($admissionId: ID!, $dischargeDate: Date) {
+    dischargePreview(admissionId: $admissionId, dischargeDate: $dischargeDate) {
+      dischargeDate
+      hasCurrentCycle
+      cycleStart
+      cycleEnd
+      fullFee
+      daysInPeriod
+      daysStayed
+      proratedFee
+      cancelledFee
+      feesDue
+      chargesDue
+      totalDueNow
+      lines {
+        label
+        kind
+        amount
+      }
+    }
+  }
+`;
+
 export const DISCHARGE_PATIENT = gql`
-  mutation DischargePatient($admissionId: ID!, $refundAmount: Decimal) {
-    dischargePatient(admissionId: $admissionId, refundAmount: $refundAmount) {
-      hasOutstandingDues
-      outstandingInvoiceCount
+  mutation DischargePatient(
+    $admissionId: ID!
+    $dischargeDate: Date
+    $feesPaid: Decimal
+    $chargesPaid: Decimal
+    $accountId: ID
+    $refundAmount: Decimal
+  ) {
+    dischargePatient(
+      admissionId: $admissionId
+      dischargeDate: $dischargeDate
+      feesPaid: $feesPaid
+      chargesPaid: $chargesPaid
+      accountId: $accountId
+      refundAmount: $refundAmount
+    ) {
       refundAmount
       admission {
         id
