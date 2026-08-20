@@ -157,3 +157,72 @@ def test_fee_status_due_soon(admin_client, patient):
         status=InvoiceStatus.PARTIAL,
     )
     assert _fee_status(admin_client, patient) == "DUE_SOON"
+
+
+# --- discharged patients --------------------------------------------------
+
+SEARCH_FULL = """
+query Search($query: String!) {
+  searchPatients(query: $query) {
+    name room bed feeStatus tags
+  }
+}
+"""
+
+DISCHARGE = """
+mutation($id: ID!) { dischargePatient(admissionId: $id) { admission { status } } }
+"""
+
+
+def _row(client, query="Jane"):
+    return client.execute(SEARCH_FULL, {"query": query})["data"]["searchPatients"][0]
+
+
+def test_discharged_patient_hides_bed_and_shows_nil_and_tag(admin_client, patient):
+    admission = patient.admissions.first()
+    # No invoices → nothing owed → clean discharge.
+    result = admin_client.execute(DISCHARGE, {"id": str(admission.id)})
+    assert result.get("errors") is None
+
+    row = _row(admin_client)
+    assert row["room"] is None and row["bed"] is None   # bed hidden
+    assert row["feeStatus"] == "NIL"                     # tallied
+    assert "Discharged" in row["tags"]                   # auto-tagged
+
+
+def test_discharged_patient_owing_shows_overdue(admin_client, patient):
+    admission = patient.admissions.first()
+    # Discharge blocks with dues, so seed a settled discharge then leave a debt:
+    # here we mark discharged directly and add an unpaid invoice.
+    admission.status = AdmissionStatus.DISCHARGED
+    admission.discharge_date = date.today()
+    admission.save()
+    Invoice.objects.create(
+        admission=admission, fee=_fee_for(admission),
+        billing_period_start=date(2026, 1, 15), billing_period_end=date(2026, 2, 14),
+        base_fee=Decimal("25000.00"), total_due=Decimal("25000.00"),
+        status=InvoiceStatus.UNPAID,
+    )
+    row = _row(admin_client)
+    assert row["room"] is None and row["bed"] is None
+    assert row["feeStatus"] == "OVERDUE"                 # still owes
+
+
+def test_readmission_clears_discharged_tag(admin_client, finance_client, patient):
+    admission = patient.admissions.first()
+    admin_client.execute(DISCHARGE, {"id": str(admission.id)})
+    assert "Discharged" in _row(admin_client)["tags"]
+
+    # Re-admit (ADMIN) — tag drops, bed returns.
+    readmit = """
+    mutation($pid: ID!, $d: Date!, $fee: Decimal!) {
+      readmitPatient(patientId: $pid, admissionDate: $d, monthlyFee: $fee) { id status }
+    }
+    """
+    res = admin_client.execute(
+        readmit, {"pid": str(patient.id), "d": str(date.today()), "fee": "25000"}
+    )
+    assert res.get("errors") is None
+    row = _row(admin_client)
+    assert "Discharged" not in row["tags"]
+    assert row["feeStatus"] != "NIL"                     # active billing again

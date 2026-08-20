@@ -534,28 +534,65 @@ def _fee_status_for_patient(patient) -> str:
     return 'CURRENT'
 
 
+def _patient_owes(patient) -> bool:
+    """Whether the patient has any unpaid or partially-paid invoice."""
+    return Invoice.objects.filter(
+        admission__patient=patient,
+        status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL],
+    ).exists()
+
+
+# A patient carries this tag while they have no active admission, so search and
+# the tag filters surface discharged patients. Added on discharge, removed on
+# re-admission.
+DISCHARGED_TAG = 'Discharged'
+
+
+def _set_discharged_tag(patient, discharged: bool) -> None:
+    """Add or remove the shared 'Discharged' tag on ``patient``."""
+    tag, _ = Tag.get_or_create_normalized(DISCHARGED_TAG, category=TagCategory.OTHER)
+    if tag is None:
+        return
+    if discharged:
+        patient.tags.add(tag)
+    else:
+        patient.tags.remove(tag)
+
+
 def _patient_search_result(patient) -> PatientSearchResult:
-    """Build a PatientSearchResult from a patient, resolving their current
-    (or most recent) admission and derived fee status."""
-    admission = (
+    """Build a PatientSearchResult from a patient. A currently-admitted patient
+    shows their bed and live fee status; a discharged patient (no active
+    admission) shows no bed and a discharge-aware status: OVERDUE if they still
+    owe money, else NIL."""
+    active = (
         patient.admissions.filter(status=AdmissionStatus.ACTIVE)
         .select_related('bed__room')
         .order_by('-admission_date')
         .first()
-        or patient.admissions.select_related('bed__room')
-        .order_by('-admission_date')
-        .first()
     )
+    if active is not None:
+        room = active.bed.room.name if active.bed else None
+        bed = active.bed.label if active.bed else None
+        admission_date = active.admission_date
+        fee_status = _fee_status_for_patient(patient)
+    else:
+        # Discharged / not currently admitted: no bed; the fee status reflects
+        # whether anything is still owed rather than a live billing cycle.
+        recent = patient.admissions.order_by('-admission_date').first()
+        room = None
+        bed = None
+        admission_date = recent.admission_date if recent else None
+        fee_status = 'OVERDUE' if _patient_owes(patient) else 'NIL'
     return PatientSearchResult(
         id=patient.id,
         patient_id=patient.patient_id,
         name=patient.name,
         guardian_name=patient.guardian_name,
         guardian_phone=patient.guardian_phone,
-        admission_date=admission.admission_date if admission else None,
-        room=admission.bed.room.name if admission and admission.bed else None,
-        bed=admission.bed.label if admission and admission.bed else None,
-        fee_status=_fee_status_for_patient(patient),
+        admission_date=admission_date,
+        room=room,
+        bed=bed,
+        fee_status=fee_status,
         tags=list(patient.tags.order_by('name').values_list('label', flat=True)),
     )
 
@@ -1995,6 +2032,9 @@ class Mutation:
                 bed.save(update_fields=['status'])
             BillingService.generate_all_due_for_admission(admission.id)
 
+            # No longer discharged — drop the Discharged tag.
+            _set_discharged_tag(patient, False)
+
         return admission
 
     # Edit a patient's profile fields. ADMIN only. Only the fields provided are
@@ -2186,6 +2226,9 @@ class Mutation:
 
             # A discharged admission holds no active fee.
             FeeService.deactivate_fee_on_discharge(admission.id)
+
+            # Tag the patient Discharged (surfaces in search / tag filters).
+            _set_discharged_tag(admission.patient, True)
 
             # Free the bed if one was assigned.
             if admission.bed is not None:
