@@ -57,6 +57,12 @@ OPERATIONS = [
     ("feeHistory", '{ feeHistory(patientId: "1") { id } }', {"ADMIN", "FINANCE"}),
     ("foodRates", "{ foodRates { id } }", {"ADMIN", "FINANCE"}),
     ("currentFoodRate", "{ currentFoodRate { id } }", {"ADMIN", "FINANCE"}),
+    ("staffMealRates", "{ staffMealRates { id } }", {"ADMIN", "FINANCE"}),
+    (
+        "currentStaffMealRate",
+        "{ currentStaffMealRate { id } }",
+        {"ADMIN", "FINANCE"},
+    ),
     (
         "foodVendorList",
         '{ foodVendorList(dateFrom: "2026-01-01", dateTo: "2026-01-02")'
@@ -159,6 +165,11 @@ OPERATIONS = [
     (
         "setFoodRate",
         'mutation { setFoodRate(amount: "100") { id } }',
+        {"ADMIN", "FINANCE"},
+    ),
+    (
+        "setStaffMealRate",
+        'mutation { setStaffMealRate(amount: "1000") { id } }',
         {"ADMIN", "FINANCE"},
     ),
     # --- Mutations: ADMIN + NURSE -----------------------------------------

@@ -766,6 +766,7 @@ export const STAFF_LIST = gql`
       staffCode
       name
       designation
+      gender
       phone
       isActive
       joinedOn
@@ -907,6 +908,35 @@ export const PATIENT_FOOD_REPORT = gql`
           amount
         }
       }
+    }
+  }
+`;
+
+// --- Canteen: staff monthly meal rate -------------------------------------
+
+export const STAFF_MEAL_RATES = gql`
+  query StaffMealRates {
+    currentStaffMealRate {
+      id
+      amount
+      effectiveFrom
+    }
+    staffMealRates {
+      id
+      amount
+      effectiveFrom
+      note
+      createdBy {
+        email
+      }
+    }
+  }
+`;
+
+export const SET_STAFF_MEAL_RATE = gql`
+  mutation SetStaffMealRate($amount: Decimal!, $effectiveFrom: Date, $note: String) {
+    setStaffMealRate(amount: $amount, effectiveFrom: $effectiveFrom, note: $note) {
+      id
     }
   }
 `;

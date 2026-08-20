@@ -318,10 +318,21 @@ class StaffType:
     staff_code: auto
     name: auto
     designation: auto
+    gender: auto
     phone: auto
     is_active: auto
     joined_on: auto
     user: Optional[UserType]
+    created_at: auto
+
+
+@strawberry_django.type(models.StaffMealRate)
+class StaffMealRateType:
+    id: auto
+    amount: auto
+    effective_from: auto
+    note: auto
+    created_by: Optional[UserType]
     created_at: auto
 
 

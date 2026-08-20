@@ -657,6 +657,8 @@ class Staff(models.Model):
         max_length=12, choices=StaffDesignation.choices,
         default=StaffDesignation.OTHER,
     )
+    # Used to split the canteen meal count into Male / Female. Blank until set.
+    gender = models.CharField(max_length=10, choices=Gender.choices, blank=True)
     phone = models.CharField(max_length=20, blank=True)
     is_active = models.BooleanField(default=True)
     joined_on = models.DateField(null=True, blank=True)
@@ -752,6 +754,39 @@ class FoodRate(models.Model):
     @classmethod
     def rate_on(cls, day):
         """The FoodRate in force on ``day``, or None if none is effective yet."""
+        return (
+            cls.objects
+            .filter(effective_from__lte=day)
+            .order_by('-effective_from', '-id')
+            .first()
+        )
+
+
+class StaffMealRate(models.Model):
+    """A configurable **monthly** canteen meal charge per staff member.
+
+    Like FoodRate, rates form an effective-dated timeline: the rate for a month
+    is the StaffMealRate with the greatest ``effective_from`` on or before that
+    month. Rows are never edited or deleted — a change adds a new row.
+    """
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    effective_from = models.DateField()
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='created_staff_meal_rates',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-effective_from', '-id']
+
+    def __str__(self):
+        return f'StaffMealRate ₹{self.amount}/month from {self.effective_from}'
+
+    @classmethod
+    def rate_on(cls, day):
+        """The StaffMealRate in force on ``day``, or None if none is effective yet."""
         return (
             cls.objects
             .filter(effective_from__lte=day)

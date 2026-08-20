@@ -182,6 +182,11 @@ export default function StaffPage() {
                       </td>
                       <td className="py-2.5 pr-4">
                         {DESIGNATION_LABEL[r.designation] ?? r.designation}
+                        <span className="block text-xs text-muted-foreground">
+                          {r.gender
+                            ? r.gender.charAt(0) + r.gender.slice(1).toLowerCase()
+                            : "gender not set"}
+                        </span>
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap">
                         {r.phone || "—"}
