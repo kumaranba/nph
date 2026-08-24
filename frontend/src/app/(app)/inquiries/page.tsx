@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ActivityTimeline } from "@/components/activity-timeline";
+import { ConsentControl } from "@/components/consent-control";
 import { ImportOpListModal } from "@/components/import-op-list-modal";
 import { LinkInquiryModal } from "@/components/link-inquiry-modal";
 import { NewInquiryModal } from "@/components/new-inquiry-modal";
@@ -38,6 +39,8 @@ type Inquiry = {
   source: string;
   status: string;
   lostReason: string;
+  contactConsent: string;
+  doNotContact: boolean;
   notes: string;
   createdAt: string;
   assignedTo: { id: string; email: string } | null;
@@ -237,6 +240,11 @@ export default function InquiriesPage() {
                     <tr key={r.id} className="border-b last:border-0 align-top">
                       <td className="py-2.5 pr-4">
                         <span className="font-medium">{r.name}</span>
+                        {r.doNotContact ? (
+                          <span className="ml-2 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                            Do not contact
+                          </span>
+                        ) : null}
                         {r.phone ? (
                           <span className="block text-xs text-muted-foreground">
                             {r.phone}
@@ -414,7 +422,14 @@ export default function InquiriesPage() {
                 ✕
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              <ConsentControl
+                inquiryId={historyTarget.id}
+                consent={historyTarget.contactConsent}
+                doNotContact={historyTarget.doNotContact}
+                canEdit={canManage}
+                onChanged={() => refetch()}
+              />
               <ActivityTimeline inquiryId={historyTarget.id} canAdd={canManage} />
             </div>
           </div>

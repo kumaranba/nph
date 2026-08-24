@@ -12,6 +12,7 @@ import { DischargeModal } from "@/components/discharge-modal";
 import { EditPatientModal } from "@/components/edit-patient-modal";
 import { PatientDocumentsPanel } from "@/components/patient-documents-panel";
 import { ActivityTimeline } from "@/components/activity-timeline";
+import { ConsentControl } from "@/components/consent-control";
 import { PatientFollowUpsPanel } from "@/components/patient-follow-ups-panel";
 import { ReadmitModal } from "@/components/readmit-modal";
 import { formatDate } from "@/lib/format-date";
@@ -58,6 +59,8 @@ type PatientResult = {
     guardianPhone: string;
     admittingDoctor: string;
     place: string;
+    contactConsent: string;
+    doNotContact: boolean;
     createdAt: string;
     tags: Tag[];
     admissions: Admission[];
@@ -311,7 +314,14 @@ export default function PatientProfilePage() {
             <CardTitle>Activity</CardTitle>
             <CardDescription>Interaction history for this patient</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <ConsentControl
+              patientId={patient.id}
+              consent={patient.contactConsent}
+              doNotContact={patient.doNotContact}
+              canEdit={canManageFollowUps}
+              onChanged={() => refetch()}
+            />
             <ActivityTimeline
               patientId={patient.id}
               canAdd={canManageFollowUps}

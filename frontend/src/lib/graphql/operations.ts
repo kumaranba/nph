@@ -209,6 +209,8 @@ export const PATIENT = gql`
       guardianPhone
       admittingDoctor
       place
+      contactConsent
+      doNotContact
       createdAt
       tags { id name label category }
       admissions {
@@ -687,6 +689,8 @@ export const INQUIRIES = gql`
       source
       status
       lostReason
+      contactConsent
+      doNotContact
       notes
       createdAt
       assignedTo {
@@ -1090,6 +1094,27 @@ export const ADD_ACTIVITY = gql`
       outcome: $outcome
     ) {
       id
+    }
+  }
+`;
+
+// --- PRM: contact consent / do-not-contact (R3) ---------------------------
+
+export const SET_CONTACT_CONSENT = gql`
+  mutation SetContactConsent(
+    $consent: ConsentStatusEnum!
+    $doNotContact: Boolean!
+    $inquiryId: ID
+    $patientId: ID
+  ) {
+    setContactConsent(
+      consent: $consent
+      doNotContact: $doNotContact
+      inquiryId: $inquiryId
+      patientId: $patientId
+    ) {
+      contactConsent
+      doNotContact
     }
   }
 `;

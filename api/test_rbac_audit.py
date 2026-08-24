@@ -222,6 +222,12 @@ OPERATIONS = [
         {"PRO"},
     ),
     (
+        "setContactConsent",
+        'mutation { setContactConsent(consent: GRANTED, doNotContact: false,'
+        ' inquiryId: "999999") { contactConsent } }',
+        {"PRO"},
+    ),
+    (
         "createFollowUp",
         'mutation { createFollowUp(data: {patientId: "999999",'
         ' followUpDate: "2026-01-01"}) { id } }',

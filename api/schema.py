@@ -19,8 +19,9 @@ from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
 from .models import (
     Activity, ActivityKind, AdditionalCharge, Admission, AdmissionStatus, Bed,
-    BedStatus, Fee, Attendance, AttendanceStatus, FollowUp, FoodPreference,
-    FoodRate, Gender, Inquiry, InquirySource, InquiryStatus, LostReason, Invoice,
+    BedStatus, ConsentStatus, Fee, Attendance, AttendanceStatus, FollowUp,
+    FoodPreference, FoodRate, Gender, Inquiry, InquirySource, InquiryStatus,
+    LostReason, Invoice,
     InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt, Room,
     Staff, StaffDesignation, StaffMealRate, SystemSetting, Tag, TagCategory,
     User, UserRole, VitalReading, VitalsThreshold,
@@ -112,6 +113,21 @@ class ActivityKindEnum(Enum):
     NOTE = 'NOTE'
     CALL = 'CALL'
     WHATSAPP = 'WHATSAPP'
+
+
+@strawberry.enum
+class ConsentStatusEnum(Enum):
+    """GraphQL enum for contact_consent (mirrors models.ConsentStatus)."""
+    UNKNOWN = 'UNKNOWN'
+    GRANTED = 'GRANTED'
+    DECLINED = 'DECLINED'
+
+
+@strawberry.type
+class ConsentResult:
+    """The contact-preference state after a set_contact_consent call."""
+    contact_consent: str
+    do_not_contact: bool
 
 
 @strawberry.enum
@@ -2676,6 +2692,46 @@ class Mutation:
         return _log_activity(
             type.value, body, inquiry=inquiry, patient=patient,
             user=info.context.request.user, outcome=(outcome or '').strip(),
+        )
+
+    # Set contact consent / do-not-contact on a lead or a patient. Records a
+    # SYSTEM activity so the change is auditable. Requires one of inquiry_id /
+    # patient_id. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def set_contact_consent(
+        self,
+        info: Info,
+        consent: ConsentStatusEnum,
+        do_not_contact: bool,
+        inquiry_id: Optional[strawberry.ID] = None,
+        patient_id: Optional[strawberry.ID] = None,
+    ) -> ConsentResult:
+        if inquiry_id is not None:
+            model, pk = Inquiry, inquiry_id
+        elif patient_id is not None:
+            model, pk = Patient, patient_id
+        else:
+            raise GraphQLError('Provide an inquiry_id or a patient_id.')
+        try:
+            obj = model.objects.get(pk=pk)
+        except model.DoesNotExist:
+            raise GraphQLError(f'{model.__name__} not found.')
+
+        obj.contact_consent = consent.value
+        obj.do_not_contact = do_not_contact
+        obj.save(update_fields=['contact_consent', 'do_not_contact'])
+
+        label = ConsentStatus(consent.value).label
+        body = f'Consent → {label}' + (' · do-not-contact' if do_not_contact else '')
+        _log_activity(
+            ActivityKind.SYSTEM, body,
+            inquiry=obj if inquiry_id is not None else None,
+            patient=obj if patient_id is not None else None,
+            user=info.context.request.user,
+        )
+        return ConsentResult(
+            contact_consent=obj.contact_consent, do_not_contact=obj.do_not_contact
         )
 
     # --- PRM: follow-up writes (PRO only; ADMIN is view-only) --------------

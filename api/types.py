@@ -79,6 +79,8 @@ class PatientType:
     guardian_phone: auto
     admitting_doctor: auto
     place: auto
+    contact_consent: auto
+    do_not_contact: auto
     created_at: auto
     admissions: list['AdmissionType']
 
@@ -307,6 +309,8 @@ class InquiryType:
     status: auto
     lost_reason: auto
     lost_reason_note: auto
+    contact_consent: auto
+    do_not_contact: auto
     notes: auto
     assigned_to: Optional[UserType]
     patient: Optional[PatientType]
