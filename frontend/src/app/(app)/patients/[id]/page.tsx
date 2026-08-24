@@ -11,6 +11,7 @@ import {
 import { DischargeModal } from "@/components/discharge-modal";
 import { EditPatientModal } from "@/components/edit-patient-modal";
 import { PatientDocumentsPanel } from "@/components/patient-documents-panel";
+import { ActivityTimeline } from "@/components/activity-timeline";
 import { PatientFollowUpsPanel } from "@/components/patient-follow-ups-panel";
 import { ReadmitModal } from "@/components/readmit-modal";
 import { formatDate } from "@/lib/format-date";
@@ -302,6 +303,21 @@ export default function PatientProfilePage() {
           patientId={patient.id}
           canManage={canManageFollowUps}
         />
+      ) : null}
+
+      {patient && canViewFollowUps ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Activity</CardTitle>
+            <CardDescription>Interaction history for this patient</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ActivityTimeline
+              patientId={patient.id}
+              canAdd={canManageFollowUps}
+            />
+          </CardContent>
+        </Card>
       ) : null}
 
       {patient && chargesAdmission ? (

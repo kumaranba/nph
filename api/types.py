@@ -315,6 +315,18 @@ class InquiryType:
     updated_at: auto
 
 
+@strawberry_django.type(models.Activity)
+class ActivityType:
+    id: auto
+    type: auto
+    body: auto
+    outcome: auto
+    inquiry: Optional["InquiryType"]
+    patient: Optional[PatientType]
+    created_by: Optional[UserType]
+    created_at: auto
+
+
 @strawberry_django.type(models.Staff)
 class StaffType:
     id: auto

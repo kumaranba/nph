@@ -44,6 +44,11 @@ OPERATIONS = [
     # --- Queries: ADMIN + PRO (PRM) ---------------------------------------
     ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
     ("proUsers", "{ proUsers { id } }", {"ADMIN", "PRO"}),
+    (
+        "activities",
+        '{ activities(inquiryId: "999999") { id } }',
+        {"ADMIN", "PRO"},
+    ),
     ("followUps", '{ followUps(patientId: "1") { id } }', {"ADMIN", "PRO"}),
     ("dueFollowUps", "{ dueFollowUps { id } }", {"ADMIN", "PRO"}),
     ("dueFollowUpCount", "{ dueFollowUpCount }", {"ADMIN", "PRO"}),
@@ -209,6 +214,11 @@ OPERATIONS = [
     (
         "assignInquiry",
         'mutation { assignInquiry(inquiryId: "999999", userId: "1") { id } }',
+        {"PRO"},
+    ),
+    (
+        "addActivity",
+        'mutation { addActivity(type: NOTE, body: "x", inquiryId: "999999") { id } }',
         {"PRO"},
     ),
     (
