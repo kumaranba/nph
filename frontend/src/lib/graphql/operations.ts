@@ -1056,3 +1056,40 @@ export const CANTEEN_REPORT = gql`
     }
   }
 `;
+
+// --- PRM: activity timeline (R2) ------------------------------------------
+
+export const ACTIVITIES = gql`
+  query Activities($inquiryId: ID, $patientId: ID) {
+    activities(inquiryId: $inquiryId, patientId: $patientId) {
+      id
+      type
+      body
+      outcome
+      createdAt
+      createdBy {
+        email
+      }
+    }
+  }
+`;
+
+export const ADD_ACTIVITY = gql`
+  mutation AddActivity(
+    $type: ActivityKindEnum!
+    $body: String!
+    $inquiryId: ID
+    $patientId: ID
+    $outcome: String
+  ) {
+    addActivity(
+      type: $type
+      body: $body
+      inquiryId: $inquiryId
+      patientId: $patientId
+      outcome: $outcome
+    ) {
+      id
+    }
+  }
+`;

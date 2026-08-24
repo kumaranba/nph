@@ -655,6 +655,48 @@ class FollowUp(models.Model):
         return f'FollowUp #{self.pk} — {self.patient.name} on {self.follow_up_date}'
 
 
+class ActivityKind(models.TextChoices):
+    NOTE = 'NOTE', 'Note'
+    CALL = 'CALL', 'Call'
+    WHATSAPP = 'WHATSAPP', 'WhatsApp'
+    STAGE_CHANGE = 'STAGE_CHANGE', 'Stage change'
+    FOLLOW_UP = 'FOLLOW_UP', 'Follow-up'
+    SYSTEM = 'SYSTEM', 'System'
+
+
+class Activity(models.Model):
+    """One entry on the PRM interaction timeline. Attached to a lead
+    (``inquiry``) and/or a ``patient`` — after conversion the patient timeline
+    merges both. Manual entries (note/call/WhatsApp) are written by a PRO;
+    stage changes and follow-up completions are logged automatically."""
+    inquiry = models.ForeignKey(
+        Inquiry, on_delete=models.CASCADE, related_name='activities',
+        null=True, blank=True,
+    )
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name='activities',
+        null=True, blank=True,
+    )
+    type = models.CharField(max_length=12, choices=ActivityKind.choices)
+    body = models.TextField(blank=True)
+    outcome = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, related_name='activities',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['inquiry', '-created_at']),
+            models.Index(fields=['patient', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'Activity #{self.pk} — {self.type}'
+
+
 # ---------------------------------------------------------------------------
 # Staff (registry) — HR foundation for attendance
 # ---------------------------------------------------------------------------

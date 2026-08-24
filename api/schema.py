@@ -18,17 +18,17 @@ from .fees import FeeError, FeeService
 from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
 from .models import (
-    AdditionalCharge, Admission, AdmissionStatus, Bed, BedStatus, Fee,
-    Attendance, AttendanceStatus, FollowUp, FoodPreference, FoodRate, Gender,
-    Inquiry, InquirySource, InquiryStatus, Invoice, InvoiceStatus, Patient,
-    Payment, PaymentAccount, PaymentReceipt, Room, Staff, StaffDesignation,
-    StaffMealRate, SystemSetting, Tag, TagCategory, User, UserRole,
-    VitalReading, VitalsThreshold,
+    Activity, ActivityKind, AdditionalCharge, Admission, AdmissionStatus, Bed,
+    BedStatus, Fee, Attendance, AttendanceStatus, FollowUp, FoodPreference,
+    FoodRate, Gender, Inquiry, InquirySource, InquiryStatus, LostReason, Invoice,
+    InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt, Room,
+    Staff, StaffDesignation, StaffMealRate, SystemSetting, Tag, TagCategory,
+    User, UserRole, VitalReading, VitalsThreshold,
 )
 from .permissions import login_required, require_roles
 from .types import (
-    AdditionalChargeType, AdmissionType, AttendanceType, BedType, FeeType,
-    FollowUpType, FoodRateType, InquiryType, InvoiceType, PatientType,
+    ActivityType, AdditionalChargeType, AdmissionType, AttendanceType, BedType,
+    FeeType, FollowUpType, FoodRateType, InquiryType, InvoiceType, PatientType,
     PaymentAccountType, PaymentReceiptType, PaymentType, RoomType,
     StaffMealRateType, StaffType, TagType, UserType, VitalReadingType,
     VitalsThresholdType,
@@ -104,6 +104,14 @@ class LostReasonEnum(Enum):
     NOT_READY = 'NOT_READY'
     UNREACHABLE = 'UNREACHABLE'
     OTHER = 'OTHER'
+
+
+@strawberry.enum
+class ActivityKindEnum(Enum):
+    """Manually-loggable activity types (system ones are written automatically)."""
+    NOTE = 'NOTE'
+    CALL = 'CALL'
+    WHATSAPP = 'WHATSAPP'
 
 
 @strawberry.enum
@@ -347,6 +355,14 @@ DUE_SOON_WINDOW_DAYS = 7
 def _today() -> date:
     """Indirection so tests can pin "today" deterministically."""
     return date.today()
+
+
+def _log_activity(kind, body, *, inquiry=None, patient=None, user=None, outcome=""):
+    """Write one PRM timeline entry (used by manual notes and auto-logging)."""
+    return Activity.objects.create(
+        inquiry=inquiry, patient=patient, type=kind,
+        body=body, outcome=outcome or "", created_by=user,
+    )
 
 
 @strawberry.type
@@ -1368,6 +1384,31 @@ class Query:
         return User.objects.filter(
             role=UserRole.PRO, is_active=True
         ).order_by('email')
+
+    # The interaction timeline for a lead or a patient, newest first. For a
+    # patient it merges the patient's own activities with those of any inquiry
+    # that converted into them, so nothing is lost at conversion. Pass exactly
+    # one of inquiry_id / patient_id. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def activities(
+        self,
+        info: Info,
+        inquiry_id: Optional[strawberry.ID] = None,
+        patient_id: Optional[strawberry.ID] = None,
+    ) -> List[ActivityType]:
+        if inquiry_id is not None:
+            qs = Activity.objects.filter(inquiry_id=inquiry_id)
+        elif patient_id is not None:
+            qs = Activity.objects.filter(
+                Q(patient_id=patient_id) | Q(inquiry__patient_id=patient_id)
+            )
+        else:
+            raise GraphQLError('Provide an inquiry_id or a patient_id.')
+        return (
+            qs.select_related('inquiry', 'patient', 'created_by')
+            .order_by('-created_at', '-id')
+        )
 
     # --- PRM: follow-ups (PRO manages, ADMIN views) ------------------------
     # Follow-ups for one patient, soonest date first. PRO + ADMIN.
@@ -2541,6 +2582,13 @@ class Mutation:
         inquiry.save(update_fields=[
             'status', 'lost_reason', 'lost_reason_note', 'updated_at',
         ])
+        label = InquiryStatus(status.value).label
+        if status == InquiryStatusEnum.LOST:
+            label += f' ({LostReason(inquiry.lost_reason).label})'
+        _log_activity(
+            ActivityKind.STAGE_CHANGE, f'Stage → {label}',
+            inquiry=inquiry, user=info.context.request.user,
+        )
         return inquiry
 
     # Reassign a lead to another PRO. PRO only; the target must be a PRO.
@@ -2578,6 +2626,7 @@ class Mutation:
             patient = Patient.objects.get(pk=patient_id)
         except Patient.DoesNotExist:
             raise GraphQLError('Patient not found.')
+        already_linked = inquiry.patient_id == patient.id
         inquiry.patient = patient
         inquiry.status = InquiryStatus.ADMITTED
         inquiry.lost_reason = ''
@@ -2585,7 +2634,49 @@ class Mutation:
         inquiry.save(update_fields=[
             'patient', 'status', 'lost_reason', 'lost_reason_note', 'updated_at',
         ])
+        if not already_linked:
+            _log_activity(
+                ActivityKind.STAGE_CHANGE,
+                f'Converted to patient {patient.patient_id} — Admitted',
+                inquiry=inquiry, patient=patient,
+                user=info.context.request.user,
+            )
         return inquiry
+
+    # Log a manual timeline entry (note / call / WhatsApp) on a lead or a
+    # patient. Requires at least one of inquiry_id / patient_id. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def add_activity(
+        self,
+        info: Info,
+        type: ActivityKindEnum,
+        body: str,
+        inquiry_id: Optional[strawberry.ID] = None,
+        patient_id: Optional[strawberry.ID] = None,
+        outcome: Optional[str] = "",
+    ) -> ActivityType:
+        body = (body or '').strip()
+        if not body:
+            raise GraphQLError('Activity note cannot be empty.')
+        inquiry = None
+        patient = None
+        if inquiry_id is not None:
+            try:
+                inquiry = Inquiry.objects.get(pk=inquiry_id)
+            except Inquiry.DoesNotExist:
+                raise GraphQLError('Inquiry not found.')
+        if patient_id is not None:
+            try:
+                patient = Patient.objects.get(pk=patient_id)
+            except Patient.DoesNotExist:
+                raise GraphQLError('Patient not found.')
+        if inquiry is None and patient is None:
+            raise GraphQLError('Attach the note to a lead or a patient.')
+        return _log_activity(
+            type.value, body, inquiry=inquiry, patient=patient,
+            user=info.context.request.user, outcome=(outcome or '').strip(),
+        )
 
     # --- PRM: follow-up writes (PRO only; ADMIN is view-only) --------------
     # Schedule a follow-up for a patient. Stamped with the creating PRO. The
@@ -2631,6 +2722,13 @@ class Mutation:
         if not follow_up.is_done:
             follow_up.is_done = True
             follow_up.save(update_fields=['is_done'])
+            body = 'Follow-up completed'
+            if follow_up.note:
+                body += f' — {follow_up.note}'
+            _log_activity(
+                ActivityKind.FOLLOW_UP, body,
+                patient=follow_up.patient, user=info.context.request.user,
+            )
         return follow_up
 
 

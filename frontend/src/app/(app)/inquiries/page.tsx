@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@apollo/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ActivityTimeline } from "@/components/activity-timeline";
 import { ImportOpListModal } from "@/components/import-op-list-modal";
 import { LinkInquiryModal } from "@/components/link-inquiry-modal";
 import { NewInquiryModal } from "@/components/new-inquiry-modal";
@@ -94,6 +95,7 @@ export default function InquiriesPage() {
   const [showImport, setShowImport] = useState(false);
   const [linkTarget, setLinkTarget] = useState<Inquiry | null>(null);
   const [lostTarget, setLostTarget] = useState<Inquiry | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<Inquiry | null>(null);
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -245,6 +247,13 @@ export default function InquiriesPage() {
                             {r.notes}
                           </span>
                         ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setHistoryTarget(r)}
+                          className="mt-0.5 text-[11px] font-medium text-primary hover:underline"
+                        >
+                          History
+                        </button>
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap">
                         {SOURCE_LABEL[r.source] ?? r.source}
@@ -378,6 +387,38 @@ export default function InquiriesPage() {
             refetch();
           }}
         />
+      ) : null}
+      {historyTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex justify-center bg-black/50 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Lead history"
+          onClick={() => setHistoryTarget(null)}
+        >
+          <div
+            className="flex h-full w-full flex-col bg-background shadow-lg sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-lg sm:border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b px-4 py-3.5">
+              <div>
+                <h2 className="text-base font-semibold">{historyTarget.name}</h2>
+                <p className="text-xs text-muted-foreground">Interaction history</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setHistoryTarget(null)}
+                className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <ActivityTimeline inquiryId={historyTarget.id} canAdd={canManage} />
+            </div>
+          </div>
+        </div>
       ) : null}
     </main>
   );
