@@ -20,8 +20,16 @@ invariants MUST hold and are covered by tests:
 6. **`change_fee.effective_from` defaults** to the admission's next
    not-yet-invoiced billing cycle date. An explicit `effective_from` that
    differs from that default requires `override=True`.
-7. **Generated invoices are immutable w.r.t. fees.** Changing a fee after an
-   invoice is generated never alters that invoice's `base_fee` or `fee`.
+7. **Generated invoices re-price only when the fee change covers their whole
+   period.** A fee change never touches invoices for periods *before* its
+   `effective_from`; a default change (effective_from = next un-invoiced cycle)
+   therefore alters no existing invoice. But an override `effective_from` that
+   lands on/before an already-generated cycle's start **re-prices that cycle's
+   invoice** (`base_fee`, `fee` snapshot, `total_due`, status). If the new fee
+   is lower than what was already paid, the surplus is released to the
+   admission's advance credit. `BillingService.reprice_invoice` does this;
+   `reconcile_invoice_fees` backfills invoices to the fee in force at their
+   period start.
 8. **A re-admission is independent.** A new `Admission` row starts its own Fee
    history, unrelated to any prior admission of the same patient.
 

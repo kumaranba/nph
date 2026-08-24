@@ -89,6 +89,18 @@ class FeeService:
             created_by=user,
         )
 
+        # Re-price any already-generated invoice whose period is fully covered by
+        # this fee (its cycle starts on/after the effective date). On a default
+        # change (effective_from = next un-invoiced cycle) no existing invoice
+        # qualifies, so nothing is touched. An override effective date that lands
+        # on an already-billed cycle re-prices that cycle's invoice.
+        for invoice in admission.invoices.filter(
+            billing_period_start__gte=effective_from,
+            is_opening_balance=False,
+            is_settlement=False,
+        ):
+            BillingService.reprice_invoice(invoice, new_fee)
+
         # Post-condition: exactly one active fee.
         if admission.fees.filter(is_active=True).count() != 1:
             raise FeeError("Invariant violation: expected exactly one active fee.")
