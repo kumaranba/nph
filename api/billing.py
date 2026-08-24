@@ -297,6 +297,51 @@ class BillingService:
 
     @classmethod
     @transaction.atomic
+    def reprice_invoice(cls, invoice, new_fee) -> Invoice:
+        """Re-price an already-generated monthly invoice to ``new_fee``.
+
+        Used when a fee change's effective date covers a period whose invoice
+        was already generated. Re-snapshots the fee, recomputes total_due (fee +
+        that period's charges) and status. If the new fee is lower than what was
+        already paid, the surplus is released to the admission's advance credit
+        (see ``_release_overpayment_to_credit``). Opening-balance and settlement
+        invoices are never re-priced. Idempotent."""
+        if invoice.is_opening_balance or invoice.is_settlement:
+            return invoice
+        if invoice.fee_id == new_fee.id and invoice.base_fee == new_fee.amount:
+            return invoice
+        invoice.fee = new_fee
+        invoice.base_fee = new_fee.amount
+        invoice.save(update_fields=["fee", "base_fee"])
+        cls.recompute_invoice_total(invoice)
+        cls._release_overpayment_to_credit(invoice)
+        return invoice
+
+    @classmethod
+    def _release_overpayment_to_credit(cls, invoice) -> None:
+        """If the invoice is now paid beyond its total (e.g. a fee was lowered
+        after payment), release the surplus to the admission's advance credit so
+        it auto-applies to future invoices. Recorded as a receiptless reversal
+        entry so the invoice reads exactly settled and books don't double-count."""
+        from .models import Payment
+
+        invoice.refresh_from_db()
+        surplus = cls.amount_paid(invoice) - invoice.total_due
+        if surplus <= 0:
+            return
+        Payment.objects.create(
+            invoice=invoice, amount=-surplus, paid_on=date.today(),
+            recorded_by=None,
+        )
+        admission = invoice.admission
+        admission.credit_balance = (
+            admission.credit_balance or Decimal("0")
+        ) + surplus
+        admission.save(update_fields=["credit_balance"])
+        cls.recompute_status(invoice)
+
+    @classmethod
+    @transaction.atomic
     def bill_charge(cls, charge) -> Invoice:
         """Ensure ``charge`` is reflected on an invoice, immediately.
 
