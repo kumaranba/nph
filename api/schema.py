@@ -80,16 +80,30 @@ class InquirySourceEnum(Enum):
     PHONE = 'PHONE'
     WALKIN = 'WALKIN'
     WEB = 'WEB'
+    REFERRAL = 'REFERRAL'
+    OP_CONSULT = 'OP_CONSULT'
     OP_IMPORT = 'OP_IMPORT'
 
 
 @strawberry.enum
 class InquiryStatusEnum(Enum):
-    """GraphQL enum for Inquiry.status (mirrors models.InquiryStatus)."""
+    """GraphQL enum for Inquiry.status — the pipeline stage."""
     NEW = 'NEW'
-    FOLLOWED_UP = 'FOLLOWED_UP'
-    CONVERTED = 'CONVERTED'
-    CLOSED = 'CLOSED'
+    CONTACTED = 'CONTACTED'
+    CONSULTED = 'CONSULTED'
+    ADMITTED = 'ADMITTED'
+    LOST = 'LOST'
+
+
+@strawberry.enum
+class LostReasonEnum(Enum):
+    """GraphQL enum for Inquiry.lost_reason (mirrors models.LostReason)."""
+    COST = 'COST'
+    DISTANCE = 'DISTANCE'
+    CHOSE_OTHER = 'CHOSE_OTHER'
+    NOT_READY = 'NOT_READY'
+    UNREACHABLE = 'UNREACHABLE'
+    OTHER = 'OTHER'
 
 
 @strawberry.enum
@@ -1339,13 +1353,21 @@ class Query:
         status: Optional[InquiryStatusEnum] = None,
         search: Optional[str] = None,
     ) -> List[InquiryType]:
-        qs = Inquiry.objects.select_related('patient', 'created_by')
+        qs = Inquiry.objects.select_related('patient', 'created_by', 'assigned_to')
         if status is not None:
             qs = qs.filter(status=status.value)
         term = (search or '').strip()
         if term:
             qs = qs.filter(Q(name__icontains=term) | Q(phone__icontains=term))
         return qs.order_by('-created_at', '-id')
+
+    # Active PRO users, for the lead-assignment picker. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def pro_users(self, info: Info) -> List[UserType]:
+        return User.objects.filter(
+            role=UserRole.PRO, is_active=True
+        ).order_by('email')
 
     # --- PRM: follow-ups (PRO manages, ADMIN views) ------------------------
     # Follow-ups for one patient, soonest date first. PRO + ADMIN.
@@ -2468,42 +2490,80 @@ class Mutation:
         )
 
     # --- PRM: inquiry writes (PRO only; ADMIN is view-only) ----------------
-    # Log a new inquiry. Starts NEW, stamped with the creating PRO. PRO only.
+    # Log a new inquiry. Starts NEW, owned by and stamped with the creating PRO.
     @strawberry.mutation
     @require_roles(UserRole.PRO)
     def create_inquiry(self, info: Info, data: CreateInquiryInput) -> InquiryType:
         name = (data.name or '').strip()
         if not name:
             raise GraphQLError('Inquiry name is required.')
+        user = info.context.request.user
         return Inquiry.objects.create(
             name=name,
             phone=(data.phone or '').strip(),
             source=data.source.value,
             notes=(data.notes or '').strip(),
             status=InquiryStatus.NEW,
-            created_by=info.context.request.user,
+            assigned_to=user,
+            created_by=user,
         )
 
-    # Move an inquiry to a new status (e.g. NEW → FOLLOWED_UP → CLOSED). PRO
-    # only. Use link_inquiry_to_patient to convert — that also sets the FK.
+    # Move a lead through the pipeline (NEW → CONTACTED → CONSULTED → LOST).
+    # ADMITTED is reached only via link_inquiry_to_patient; LOST requires a
+    # reason. Moving off LOST clears the reason. PRO only.
     @strawberry.mutation
     @require_roles(UserRole.PRO)
     def update_inquiry_status(
-        self, info: Info, inquiry_id: strawberry.ID, status: InquiryStatusEnum
+        self,
+        info: Info,
+        inquiry_id: strawberry.ID,
+        status: InquiryStatusEnum,
+        lost_reason: Optional[LostReasonEnum] = None,
+        lost_reason_note: Optional[str] = "",
     ) -> InquiryType:
         try:
             inquiry = Inquiry.objects.get(pk=inquiry_id)
         except Inquiry.DoesNotExist:
             raise GraphQLError('Inquiry not found.')
-        if status == InquiryStatusEnum.CONVERTED and inquiry.patient_id is None:
+        if status == InquiryStatusEnum.ADMITTED:
             raise GraphQLError(
-                'Link the inquiry to a patient to mark it converted.'
+                'Link the inquiry to a patient to mark it admitted.'
             )
+        if status == InquiryStatusEnum.LOST:
+            if lost_reason is None:
+                raise GraphQLError('A lost reason is required to mark a lead lost.')
+            inquiry.lost_reason = lost_reason.value
+            inquiry.lost_reason_note = (lost_reason_note or '').strip()
+        else:
+            inquiry.lost_reason = ''
+            inquiry.lost_reason_note = ''
         inquiry.status = status.value
-        inquiry.save(update_fields=['status', 'updated_at'])
+        inquiry.save(update_fields=[
+            'status', 'lost_reason', 'lost_reason_note', 'updated_at',
+        ])
         return inquiry
 
-    # Convert an inquiry: attach the resulting patient and mark it CONVERTED.
+    # Reassign a lead to another PRO. PRO only; the target must be a PRO.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def assign_inquiry(
+        self, info: Info, inquiry_id: strawberry.ID, user_id: strawberry.ID
+    ) -> InquiryType:
+        try:
+            inquiry = Inquiry.objects.get(pk=inquiry_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Inquiry not found.')
+        try:
+            target = User.objects.get(pk=user_id, is_active=True)
+        except User.DoesNotExist:
+            raise GraphQLError('User not found.')
+        if target.role != UserRole.PRO:
+            raise GraphQLError('Inquiries can only be assigned to a PRO.')
+        inquiry.assigned_to = target
+        inquiry.save(update_fields=['assigned_to', 'updated_at'])
+        return inquiry
+
+    # Convert an inquiry: attach the resulting patient and mark it ADMITTED.
     # PRO only. Idempotent target — re-linking to the same patient is a no-op.
     @strawberry.mutation
     @require_roles(UserRole.PRO)
@@ -2519,8 +2579,12 @@ class Mutation:
         except Patient.DoesNotExist:
             raise GraphQLError('Patient not found.')
         inquiry.patient = patient
-        inquiry.status = InquiryStatus.CONVERTED
-        inquiry.save(update_fields=['patient', 'status', 'updated_at'])
+        inquiry.status = InquiryStatus.ADMITTED
+        inquiry.lost_reason = ''
+        inquiry.lost_reason_note = ''
+        inquiry.save(update_fields=[
+            'patient', 'status', 'lost_reason', 'lost_reason_note', 'updated_at',
+        ])
         return inquiry
 
     # --- PRM: follow-up writes (PRO only; ADMIN is view-only) --------------

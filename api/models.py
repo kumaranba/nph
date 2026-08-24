@@ -564,26 +564,52 @@ class InquirySource(models.TextChoices):
     PHONE = 'PHONE', 'Phone'
     WALKIN = 'WALKIN', 'Walk-in'
     WEB = 'WEB', 'Web'
+    REFERRAL = 'REFERRAL', 'Referral'
+    OP_CONSULT = 'OP_CONSULT', 'OP consult'
     OP_IMPORT = 'OP_IMPORT', 'OP list import'
 
 
 class InquiryStatus(models.TextChoices):
+    """The lead's stage in the admissions pipeline. (Field name kept as
+    ``status`` for continuity; ADMITTED is reached only by linking a patient,
+    LOST requires a reason.)"""
     NEW = 'NEW', 'New'
-    FOLLOWED_UP = 'FOLLOWED_UP', 'Followed up'
-    CONVERTED = 'CONVERTED', 'Converted'
-    CLOSED = 'CLOSED', 'Closed'
+    CONTACTED = 'CONTACTED', 'Contacted'
+    CONSULTED = 'CONSULTED', 'Consulted'
+    ADMITTED = 'ADMITTED', 'Admitted'
+    LOST = 'LOST', 'Lost'
+
+
+class LostReason(models.TextChoices):
+    COST = 'COST', 'Cost'
+    DISTANCE = 'DISTANCE', 'Distance'
+    CHOSE_OTHER = 'CHOSE_OTHER', 'Chose another provider'
+    NOT_READY = 'NOT_READY', 'Not ready / declined'
+    UNREACHABLE = 'UNREACHABLE', 'Unreachable'
+    OTHER = 'OTHER', 'Other'
 
 
 class Inquiry(models.Model):
     """A prospective-patient inquiry, from any intake channel. Managed by the
-    PRO role; converted to a Patient by linking on admission."""
+    PRO role; ``status`` tracks its pipeline stage and it converts to a Patient
+    by linking on admission."""
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, blank=True)
     source = models.CharField(max_length=12, choices=InquirySource.choices)
     status = models.CharField(
         max_length=12, choices=InquiryStatus.choices, default=InquiryStatus.NEW
     )
+    # Set only when status is LOST — why the lead didn't convert.
+    lost_reason = models.CharField(
+        max_length=12, choices=LostReason.choices, blank=True
+    )
+    lost_reason_note = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
+    # The PRO who owns this lead. Defaults to the creator.
+    assigned_to = models.ForeignKey(
+        User, on_delete=models.SET_NULL, related_name='assigned_inquiries',
+        null=True, blank=True,
+    )
     # Set when the inquiry converts to a real patient.
     patient = models.ForeignKey(
         Patient, on_delete=models.SET_NULL, related_name='inquiries',

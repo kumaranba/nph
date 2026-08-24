@@ -686,13 +686,27 @@ export const INQUIRIES = gql`
       phone
       source
       status
+      lostReason
       notes
       createdAt
+      assignedTo {
+        id
+        email
+      }
       patient {
         id
         patientId
         name
       }
+    }
+  }
+`;
+
+export const PRO_USERS = gql`
+  query ProUsers {
+    proUsers {
+      id
+      email
     }
   }
 `;
@@ -706,10 +720,33 @@ export const CREATE_INQUIRY = gql`
 `;
 
 export const UPDATE_INQUIRY_STATUS = gql`
-  mutation UpdateInquiryStatus($id: ID!, $status: InquiryStatusEnum!) {
-    updateInquiryStatus(inquiryId: $id, status: $status) {
+  mutation UpdateInquiryStatus(
+    $id: ID!
+    $status: InquiryStatusEnum!
+    $lostReason: LostReasonEnum
+    $lostReasonNote: String
+  ) {
+    updateInquiryStatus(
+      inquiryId: $id
+      status: $status
+      lostReason: $lostReason
+      lostReasonNote: $lostReasonNote
+    ) {
       id
       status
+      lostReason
+    }
+  }
+`;
+
+export const ASSIGN_INQUIRY = gql`
+  mutation AssignInquiry($id: ID!, $userId: ID!) {
+    assignInquiry(inquiryId: $id, userId: $userId) {
+      id
+      assignedTo {
+        id
+        email
+      }
     }
   }
 `;

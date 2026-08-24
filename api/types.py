@@ -305,7 +305,10 @@ class InquiryType:
     phone: auto
     source: auto
     status: auto
+    lost_reason: auto
+    lost_reason_note: auto
     notes: auto
+    assigned_to: Optional[UserType]
     patient: Optional[PatientType]
     created_by: Optional[UserType]
     created_at: auto

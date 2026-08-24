@@ -43,6 +43,7 @@ OPERATIONS = [
     ),
     # --- Queries: ADMIN + PRO (PRM) ---------------------------------------
     ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
+    ("proUsers", "{ proUsers { id } }", {"ADMIN", "PRO"}),
     ("followUps", '{ followUps(patientId: "1") { id } }', {"ADMIN", "PRO"}),
     ("dueFollowUps", "{ dueFollowUps { id } }", {"ADMIN", "PRO"}),
     ("dueFollowUpCount", "{ dueFollowUpCount }", {"ADMIN", "PRO"}),
@@ -197,12 +198,17 @@ OPERATIONS = [
     ),
     (
         "updateInquiryStatus",
-        'mutation { updateInquiryStatus(inquiryId: "999999", status: CLOSED) { id } }',
+        'mutation { updateInquiryStatus(inquiryId: "999999", status: CONTACTED) { id } }',
         {"PRO"},
     ),
     (
         "linkInquiryToPatient",
         'mutation { linkInquiryToPatient(inquiryId: "999999", patientId: "1") { id } }',
+        {"PRO"},
+    ),
+    (
+        "assignInquiry",
+        'mutation { assignInquiry(inquiryId: "999999", userId: "1") { id } }',
         {"PRO"},
     ),
     (
