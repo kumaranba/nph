@@ -23,7 +23,9 @@ import {
 import { getAccessToken } from "@/lib/auth";
 import { formatDate } from "@/lib/format-date";
 import {
+  ASSIGN_INQUIRY,
   INQUIRIES,
+  PRO_USERS,
   UPDATE_INQUIRY_STATUS,
 } from "@/lib/graphql/operations";
 import { useMe } from "@/lib/me-context";
@@ -34,37 +36,54 @@ type Inquiry = {
   phone: string;
   source: string;
   status: string;
+  lostReason: string;
   notes: string;
   createdAt: string;
+  assignedTo: { id: string; email: string } | null;
   patient: { id: string; patientId: string; name: string } | null;
 };
 
 type Result = { inquiries: Inquiry[] };
+type ProUsers = { proUsers: Array<{ id: string; email: string }> };
 
 const SOURCE_LABEL: Record<string, string> = {
   WHATSAPP: "WhatsApp",
   PHONE: "Phone",
   WALKIN: "Walk-in",
   WEB: "Web",
+  REFERRAL: "Referral",
+  OP_CONSULT: "OP consult",
   OP_IMPORT: "OP list",
 };
 
+// Pipeline stages (the backend field is `status`).
 const STATUS_LABEL: Record<string, string> = {
   NEW: "New",
-  FOLLOWED_UP: "Followed up",
-  CONVERTED: "Converted",
-  CLOSED: "Closed",
+  CONTACTED: "Contacted",
+  CONSULTED: "Consulted",
+  ADMITTED: "Admitted",
+  LOST: "Lost",
 };
 
 const STATUS_STYLE: Record<string, string> = {
   NEW: "bg-blue-50 text-blue-700",
-  FOLLOWED_UP: "bg-amber-50 text-amber-700",
-  CONVERTED: "bg-green-50 text-green-700",
-  CLOSED: "bg-zinc-100 text-zinc-600",
+  CONTACTED: "bg-amber-50 text-amber-700",
+  CONSULTED: "bg-violet-50 text-violet-700",
+  ADMITTED: "bg-green-50 text-green-700",
+  LOST: "bg-zinc-100 text-zinc-600",
 };
 
-// Manually-settable statuses (CONVERTED is reached only by linking a patient).
-const MANUAL_STATUSES = ["NEW", "FOLLOWED_UP", "CLOSED"];
+// Manually-settable stages (ADMITTED is reached only by linking a patient).
+const MANUAL_STATUSES = ["NEW", "CONTACTED", "CONSULTED", "LOST"];
+
+const LOST_REASONS: Array<{ value: string; label: string }> = [
+  { value: "COST", label: "Cost" },
+  { value: "DISTANCE", label: "Distance" },
+  { value: "CHOSE_OTHER", label: "Chose another provider" },
+  { value: "NOT_READY", label: "Not ready / declined" },
+  { value: "UNREACHABLE", label: "Unreachable" },
+  { value: "OTHER", label: "Other" },
+];
 
 export default function InquiriesPage() {
   const router = useRouter();
@@ -74,6 +93,7 @@ export default function InquiriesPage() {
   const [showNew, setShowNew] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [linkTarget, setLinkTarget] = useState<Inquiry | null>(null);
+  const [lostTarget, setLostTarget] = useState<Inquiry | null>(null);
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -92,6 +112,12 @@ export default function InquiriesPage() {
   const [updateStatus] = useMutation(UPDATE_INQUIRY_STATUS, {
     onError: () => {},
   });
+  const [assignInquiry] = useMutation(ASSIGN_INQUIRY, { onError: () => {} });
+
+  const { data: proData } = useQuery<ProUsers>(PRO_USERS, {
+    skip: !hasToken || !allowed,
+  });
+  const pros = proData?.proUsers ?? [];
 
   const rows = data?.inquiries ?? [];
 
@@ -236,29 +262,44 @@ export default function InquiriesPage() {
                             className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 hover:underline"
                             title={`${r.patient.name} · ${r.patient.patientId}`}
                           >
-                            Converted →
+                            Admitted →
                           </button>
                         ) : (
                           <span
                             className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                               STATUS_STYLE[r.status] ?? "bg-zinc-100 text-zinc-600"
                             }`}
+                            title={
+                              r.status === "LOST" && r.lostReason
+                                ? `Lost: ${r.lostReason}`
+                                : undefined
+                            }
                           >
                             {STATUS_LABEL[r.status] ?? r.status}
                           </span>
                         )}
+                        {r.assignedTo ? (
+                          <span className="mt-1 block text-[11px] text-muted-foreground">
+                            {r.assignedTo.email.split("@")[0]}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="py-2.5">
-                        {canManage && r.status !== "CONVERTED" ? (
+                        {canManage && r.status !== "ADMITTED" ? (
                           <div className="flex flex-wrap items-center gap-2">
                             <select
+                              aria-label="Stage"
                               className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               value={r.status}
                               onChange={async (e) => {
+                                const next = e.target.value;
+                                if (next === "LOST") {
+                                  setLostTarget(r); // capture a reason first
+                                  return;
+                                }
                                 await updateStatus({
-                                  variables: { id: r.id, status: e.target.value },
+                                  variables: { id: r.id, status: next },
                                 });
-                                // Keep a status-filtered list consistent.
                                 if (statusFilter) refetch();
                               }}
                             >
@@ -268,6 +309,25 @@ export default function InquiriesPage() {
                                 </option>
                               ))}
                             </select>
+                            {pros.length > 1 ? (
+                              <select
+                                aria-label="Owner"
+                                className="h-8 max-w-[120px] rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                value={r.assignedTo?.id ?? ""}
+                                onChange={(e) =>
+                                  assignInquiry({
+                                    variables: { id: r.id, userId: e.target.value },
+                                  })
+                                }
+                              >
+                                {r.assignedTo ? null : <option value="">—</option>}
+                                {pros.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.email.split("@")[0]}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => setLinkTarget(r)}
@@ -301,6 +361,103 @@ export default function InquiriesPage() {
           onClose={() => setLinkTarget(null)}
         />
       ) : null}
+      {lostTarget ? (
+        <LostReasonModal
+          inquiryName={lostTarget.name}
+          onCancel={() => setLostTarget(null)}
+          onConfirm={async (reason, note) => {
+            await updateStatus({
+              variables: {
+                id: lostTarget.id,
+                status: "LOST",
+                lostReason: reason,
+                lostReasonNote: note || null,
+              },
+            });
+            setLostTarget(null);
+            refetch();
+          }}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function LostReasonModal({
+  inquiryName,
+  onCancel,
+  onConfirm,
+}: {
+  inquiryName: string;
+  onCancel: () => void;
+  onConfirm: (reason: string, note: string) => void;
+}) {
+  const [reason, setReason] = useState("COST");
+  const [note, setNote] = useState("");
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Mark lead lost"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold">Mark lead lost</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{inquiryName}</p>
+        <div className="mt-4 space-y-3">
+          <div className="space-y-1.5">
+            <label htmlFor="lost-reason" className="text-sm font-medium">
+              Reason
+            </label>
+            <select
+              id="lost-reason"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            >
+              {LOST_REASONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="lost-note" className="text-sm font-medium">
+              Note (optional)
+            </label>
+            <input
+              id="lost-note"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Anything worth remembering"
+            />
+          </div>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            className="flex-1"
+            onClick={() => onConfirm(reason, note)}
+          >
+            Mark lost
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

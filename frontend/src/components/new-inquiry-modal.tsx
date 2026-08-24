@@ -21,6 +21,8 @@ const SOURCES: Array<{ value: string; label: string }> = [
   { value: "PHONE", label: "Phone" },
   { value: "WALKIN", label: "Walk-in" },
   { value: "WEB", label: "Web" },
+  { value: "REFERRAL", label: "Referral" },
+  { value: "OP_CONSULT", label: "OP consult" },
   { value: "OP_IMPORT", label: "OP list" },
 ];
 
