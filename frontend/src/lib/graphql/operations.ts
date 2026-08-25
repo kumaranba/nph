@@ -691,6 +691,7 @@ export const INQUIRIES = gql`
       lostReason
       contactConsent
       doNotContact
+      consultedOn
       notes
       createdAt
       assignedTo {
@@ -702,6 +703,42 @@ export const INQUIRIES = gql`
         patientId
         name
       }
+    }
+  }
+`;
+
+export const OP_CONSULT_WORKLIST = gql`
+  query OpConsultWorklist {
+    opConsultWorklist {
+      id
+      name
+      phone
+      source
+      status
+      lostReason
+      contactConsent
+      doNotContact
+      consultedOn
+      notes
+      createdAt
+      assignedTo {
+        id
+        email
+      }
+      patient {
+        id
+        patientId
+        name
+      }
+    }
+  }
+`;
+
+export const SET_CONSULTED = gql`
+  mutation SetConsulted($id: ID!, $consultedOn: Date) {
+    setConsulted(inquiryId: $id, consultedOn: $consultedOn) {
+      id
+      consultedOn
     }
   }
 `;

@@ -28,7 +28,9 @@ import { formatDate } from "@/lib/format-date";
 import {
   ASSIGN_INQUIRY,
   INQUIRIES,
+  OP_CONSULT_WORKLIST,
   PRO_USERS,
+  SET_CONSULTED,
   UPDATE_INQUIRY_STATUS,
 } from "@/lib/graphql/operations";
 import { useMe } from "@/lib/me-context";
@@ -42,6 +44,7 @@ type Inquiry = {
   lostReason: string;
   contactConsent: string;
   doNotContact: boolean;
+  consultedOn: string | null;
   notes: string;
   createdAt: string;
   assignedTo: { id: string; email: string } | null;
@@ -81,6 +84,14 @@ const STATUS_STYLE: Record<string, string> = {
 // Manually-settable stages (ADMITTED is reached only by linking a patient).
 const MANUAL_STATUSES = ["NEW", "CONTACTED", "CONSULTED", "LOST"];
 
+function daysAgo(iso: string): string {
+  const days = Math.floor(
+    (Date.now() - new Date(iso).getTime()) / 86_400_000
+  );
+  if (days <= 0) return "today";
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 const LOST_REASONS: Array<{ value: string; label: string }> = [
   { value: "COST", label: "Cost" },
   { value: "DISTANCE", label: "Distance" },
@@ -101,6 +112,7 @@ export default function InquiriesPage() {
   const [lostTarget, setLostTarget] = useState<Inquiry | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Inquiry | null>(null);
   const [histKey, setHistKey] = useState(0);
+  const [view, setView] = useState<"inquiries" | "worklist">("inquiries");
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -109,24 +121,38 @@ export default function InquiriesPage() {
 
   const allowed = me?.role === "PRO" || me?.role === "ADMIN";
   const canManage = me?.role === "PRO";
+  const isWorklist = view === "worklist";
 
   const { data, loading, error, refetch } = useQuery<Result>(INQUIRIES, {
     variables: { status: statusFilter || null, search: search || null },
-    skip: !hasToken || !allowed,
+    skip: !hasToken || !allowed || isWorklist,
     fetchPolicy: "cache-and-network",
   });
+  const worklist = useQuery<{ opConsultWorklist: Inquiry[] }>(
+    OP_CONSULT_WORKLIST,
+    { skip: !hasToken || !allowed || !isWorklist, fetchPolicy: "cache-and-network" }
+  );
 
   const [updateStatus] = useMutation(UPDATE_INQUIRY_STATUS, {
     onError: () => {},
   });
   const [assignInquiry] = useMutation(ASSIGN_INQUIRY, { onError: () => {} });
+  const [setConsulted] = useMutation(SET_CONSULTED, { onError: () => {} });
 
   const { data: proData } = useQuery<ProUsers>(PRO_USERS, {
     skip: !hasToken || !allowed,
   });
   const pros = proData?.proUsers ?? [];
 
-  const rows = data?.inquiries ?? [];
+  const effLoading = isWorklist ? worklist.loading : loading;
+  const effError = isWorklist ? worklist.error : error;
+  const rows = isWorklist
+    ? worklist.data?.opConsultWorklist ?? []
+    : data?.inquiries ?? [];
+  function refetchActive() {
+    if (isWorklist) worklist.refetch();
+    else refetch();
+  }
 
   if (!hasToken) {
     return (
@@ -152,17 +178,39 @@ export default function InquiriesPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto min-h-screen max-w-4xl space-y-4 p-4 sm:p-6 lg:p-8">
+      <div className="flex gap-1 rounded-lg border bg-muted/40 p-1 text-sm">
+        {[
+          { k: "inquiries", label: "Inquiries" },
+          { k: "worklist", label: "OP worklist" },
+        ].map((t) => (
+          <button
+            key={t.k}
+            type="button"
+            onClick={() => setView(t.k as typeof view)}
+            className={`flex-1 rounded-md px-3 py-1.5 font-medium transition-colors ${
+              view === t.k
+                ? "bg-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>Inquiries</CardTitle>
+              <CardTitle>{isWorklist ? "Consulted — not admitted" : "Inquiries"}</CardTitle>
               <CardDescription>
-                Prospective-patient enquiries and their status
+                {isWorklist
+                  ? "Outpatients who consulted but haven't been admitted — oldest first"
+                  : "Prospective-patient enquiries and their status"}
               </CardDescription>
             </div>
-            {canManage ? (
+            {canManage && !isWorklist ? (
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -179,48 +227,52 @@ export default function InquiriesPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <span className="text-sm font-medium text-muted-foreground">
-                Status
-              </span>
-              <select
-                className="flex h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="">All statuses</option>
-                {Object.entries(STATUS_LABEL).map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-              </select>
+          {!isWorklist ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Status
+                </span>
+                <select
+                  className="flex h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  {Object.entries(STATUS_LABEL).map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-[200px] flex-1 space-y-1.5">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Search
+                </span>
+                <input
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Name or phone…"
+                />
+              </div>
             </div>
-            <div className="min-w-[200px] flex-1 space-y-1.5">
-              <span className="text-sm font-medium text-muted-foreground">
-                Search
-              </span>
-              <input
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name or phone…"
-              />
-            </div>
-          </div>
+          ) : null}
 
-          {loading && rows.length === 0 ? (
+          {effLoading && rows.length === 0 ? (
             <TableSkeleton rows={5} cols={5} />
-          ) : error ? (
-            <QueryError message={error.message} onRetry={() => refetch()} />
+          ) : effError ? (
+            <QueryError message={effError.message} onRetry={() => refetchActive()} />
           ) : rows.length === 0 ? (
             <EmptyState
-              title="No inquiries"
+              title={isWorklist ? "Nothing to work" : "No inquiries"}
               description={
-                statusFilter || search
-                  ? "No inquiries match your filters."
-                  : "No inquiries logged yet."
+                isWorklist
+                  ? "No consulted outpatients are pending conversion."
+                  : statusFilter || search
+                    ? "No inquiries match your filters."
+                    : "No inquiries logged yet."
               }
             />
           ) : (
@@ -230,7 +282,9 @@ export default function InquiriesPage() {
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="py-2 pr-4 font-medium">Name</th>
                     <th className="py-2 pr-4 font-medium">Source</th>
-                    <th className="py-2 pr-4 font-medium">Logged</th>
+                    <th className="py-2 pr-4 font-medium">
+                      {isWorklist ? "Consulted" : "Logged"}
+                    </th>
                     <th className="py-2 pr-4 font-medium">Status</th>
                     <th className="py-2 font-medium">
                       {canManage ? "Actions" : ""}
@@ -269,7 +323,16 @@ export default function InquiriesPage() {
                         {SOURCE_LABEL[r.source] ?? r.source}
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap">
-                        {formatDate(r.createdAt)}
+                        {isWorklist && r.consultedOn ? (
+                          <>
+                            {formatDate(r.consultedOn)}
+                            <span className="block text-xs text-muted-foreground">
+                              {daysAgo(r.consultedOn)}
+                            </span>
+                          </>
+                        ) : (
+                          formatDate(r.createdAt)
+                        )}
                       </td>
                       <td className="py-2.5 pr-4">
                         {r.patient ? (
@@ -319,7 +382,9 @@ export default function InquiriesPage() {
                                 await updateStatus({
                                   variables: { id: r.id, status: next },
                                 });
-                                if (statusFilter) refetch();
+                                // Keep the current view consistent (a stage
+                                // change can drop a lead off the worklist).
+                                if (statusFilter || isWorklist) refetchActive();
                               }}
                             >
                               {MANUAL_STATUSES.map((s) => (
@@ -394,7 +459,7 @@ export default function InquiriesPage() {
               },
             });
             setLostTarget(null);
-            refetch();
+            refetchActive();
           }}
         />
       ) : null}
@@ -430,8 +495,31 @@ export default function InquiriesPage() {
                 consent={historyTarget.contactConsent}
                 doNotContact={historyTarget.doNotContact}
                 canEdit={canManage}
-                onChanged={() => refetch()}
+                onChanged={() => refetchActive()}
               />
+              {canManage ? (
+                <label className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-medium text-muted-foreground">
+                    Consulted on
+                  </span>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    defaultValue={historyTarget.consultedOn ?? ""}
+                    onChange={async (e) => {
+                      await setConsulted({
+                        variables: {
+                          id: historyTarget.id,
+                          consultedOn: e.target.value || null,
+                        },
+                      });
+                      setHistKey((k) => k + 1);
+                      refetchActive();
+                    }}
+                    className="h-8 rounded-md border border-input bg-background px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </label>
+              ) : null}
               {canManage && historyTarget.phone ? (
                 <ContactActions
                   phone={historyTarget.phone}

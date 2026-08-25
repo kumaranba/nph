@@ -311,6 +311,7 @@ class InquiryType:
     lost_reason_note: auto
     contact_consent: auto
     do_not_contact: auto
+    consulted_on: auto
     notes: auto
     assigned_to: Optional[UserType]
     patient: Optional[PatientType]

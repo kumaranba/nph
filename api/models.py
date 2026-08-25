@@ -624,6 +624,9 @@ class Inquiry(models.Model):
         max_length=12, choices=LostReason.choices, blank=True
     )
     lost_reason_note = models.CharField(max_length=255, blank=True)
+    # Date the person consulted as an outpatient (if any). Drives the
+    # "consulted — not admitted" conversion worklist.
+    consulted_on = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
     # The PRO who owns this lead. Defaults to the creator.
     assigned_to = models.ForeignKey(

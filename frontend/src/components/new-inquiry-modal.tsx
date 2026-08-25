@@ -14,6 +14,7 @@ type InquiryForm = {
   source: string;
   phone: string;
   notes: string;
+  consultedOn: string;
 };
 
 const SOURCES: Array<{ value: string; label: string }> = [
@@ -27,9 +28,16 @@ const SOURCES: Array<{ value: string; label: string }> = [
 ];
 
 export function NewInquiryModal({ onClose }: { onClose: () => void }) {
-  const { register, handleSubmit } = useForm<InquiryForm>({
-    defaultValues: { name: "", source: "PHONE", phone: "", notes: "" },
+  const { register, handleSubmit, watch } = useForm<InquiryForm>({
+    defaultValues: {
+      name: "",
+      source: "PHONE",
+      phone: "",
+      notes: "",
+      consultedOn: "",
+    },
   });
+  const source = watch("source");
 
   const [create, { loading, error }] = useMutation(CREATE_INQUIRY, {
     refetchQueries: [{ query: INQUIRIES, variables: { status: null, search: null } }],
@@ -53,6 +61,7 @@ export function NewInquiryModal({ onClose }: { onClose: () => void }) {
           source: values.source,
           phone: values.phone,
           notes: values.notes,
+          consultedOn: values.consultedOn || null,
         },
       },
     });
@@ -102,6 +111,20 @@ export function NewInquiryModal({ onClose }: { onClose: () => void }) {
             <Label htmlFor="iq-phone">Phone (optional)</Label>
             <Input id="iq-phone" placeholder="Mobile number" {...register("phone")} />
           </div>
+          {source === "OP_CONSULT" ? (
+            <div className="space-y-2">
+              <Label htmlFor="iq-consulted">Consulted on</Label>
+              <Input
+                id="iq-consulted"
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                {...register("consultedOn")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Puts this lead on the conversion worklist.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="iq-notes">Notes (optional)</Label>
             <textarea

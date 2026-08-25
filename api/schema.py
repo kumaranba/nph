@@ -304,6 +304,7 @@ class CreateInquiryInput:
     source: InquirySourceEnum
     phone: Optional[str] = ""
     notes: Optional[str] = ""
+    consulted_on: Optional[date] = None
 
 
 @strawberry.input
@@ -1400,6 +1401,19 @@ class Query:
         return User.objects.filter(
             role=UserRole.PRO, is_active=True
         ).order_by('email')
+
+    # The conversion worklist: leads that consulted as outpatients but haven't
+    # been admitted or lost yet, oldest consultation first. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def op_consult_worklist(self, info: Info) -> List[InquiryType]:
+        return (
+            Inquiry.objects
+            .filter(consulted_on__isnull=False)
+            .exclude(status__in=[InquiryStatus.ADMITTED, InquiryStatus.LOST])
+            .select_related('patient', 'assigned_to')
+            .order_by('consulted_on', 'id')
+        )
 
     # The interaction timeline for a lead or a patient, newest first. For a
     # patient it merges the patient's own activities with those of any inquiry
@@ -2560,10 +2574,37 @@ class Mutation:
             phone=(data.phone or '').strip(),
             source=data.source.value,
             notes=(data.notes or '').strip(),
+            consulted_on=data.consulted_on,
             status=InquiryStatus.NEW,
             assigned_to=user,
             created_by=user,
         )
+
+    # Mark (or clear) the outpatient consultation date on a lead. Populating it
+    # puts the lead on the "consulted — not admitted" worklist. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def set_consulted(
+        self,
+        info: Info,
+        inquiry_id: strawberry.ID,
+        consulted_on: Optional[date] = None,
+    ) -> InquiryType:
+        try:
+            inquiry = Inquiry.objects.get(pk=inquiry_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Inquiry not found.')
+        if consulted_on is not None and consulted_on > _today():
+            raise GraphQLError('Consultation date cannot be in the future.')
+        inquiry.consulted_on = consulted_on
+        inquiry.save(update_fields=['consulted_on', 'updated_at'])
+        body = (
+            f'Marked consulted on {consulted_on:%d-%m-%Y}'
+            if consulted_on is not None else 'Cleared consultation date'
+        )
+        _log_activity(ActivityKind.SYSTEM, body, inquiry=inquiry,
+                      user=info.context.request.user)
+        return inquiry
 
     # Move a lead through the pipeline (NEW → CONTACTED → CONSULTED → LOST).
     # ADMITTED is reached only via link_inquiry_to_patient; LOST requires a
