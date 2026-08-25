@@ -100,6 +100,14 @@ class FoodPreference(models.TextChoices):
     NON_VEG = 'NON_VEG', 'Non-vegetarian'
 
 
+class ConsentStatus(models.TextChoices):
+    """Whether the person has agreed to be contacted. UNKNOWN until a PRO sets
+    it. Separate from ``do_not_contact``, a hard opt-out."""
+    UNKNOWN = 'UNKNOWN', 'Unknown'
+    GRANTED = 'GRANTED', 'Granted'
+    DECLINED = 'DECLINED', 'Declined'
+
+
 class TagCategory(models.TextChoices):
     BEHAVIOUR = 'BEHAVIOUR', 'Behaviour'
     ILLNESS = 'ILLNESS', 'Illness'
@@ -179,6 +187,12 @@ class Patient(models.Model):
     admitting_doctor = models.CharField(max_length=255)
     # Town/place the patient is from (from the register "Place" column).
     place = models.CharField(max_length=255, blank=True)
+    # Contact preferences (PRM). do_not_contact is a hard opt-out.
+    contact_consent = models.CharField(
+        max_length=10, choices=ConsentStatus.choices,
+        default=ConsentStatus.UNKNOWN,
+    )
+    do_not_contact = models.BooleanField(default=False)
     tags = models.ManyToManyField('Tag', related_name='patients', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -599,6 +613,12 @@ class Inquiry(models.Model):
     status = models.CharField(
         max_length=12, choices=InquiryStatus.choices, default=InquiryStatus.NEW
     )
+    # Contact preferences (PRM). do_not_contact is a hard opt-out.
+    contact_consent = models.CharField(
+        max_length=10, choices=ConsentStatus.choices,
+        default=ConsentStatus.UNKNOWN,
+    )
+    do_not_contact = models.BooleanField(default=False)
     # Set only when status is LOST — why the lead didn't convert.
     lost_reason = models.CharField(
         max_length=12, choices=LostReason.choices, blank=True
