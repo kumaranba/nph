@@ -19,6 +19,7 @@ block an import.
 """
 import csv
 import io
+from datetime import datetime
 
 from .models import Inquiry, InquirySource, InquiryStatus
 
@@ -35,7 +36,26 @@ _ALIASES = {
     "notes": "notes",
     "note": "notes",
     "remarks": "notes",
+    "consult date": "consulted_on",
+    "consulted on": "consulted_on",
+    "consultation date": "consulted_on",
+    "consult_date": "consulted_on",
+    "op date": "consulted_on",
+    "date": "consulted_on",
 }
+
+# Consult-date formats the OP list may use (Indian day-first, plus ISO and the
+# "YYYY-MM-DD HH:MM:SS" that openpyxl stringifies date cells to).
+_DATE_FORMATS = ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S")
+
+
+def _parse_consult_date(value: str):
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 _ALLOWED_EXTENSIONS = (".csv", ".xlsx")
 
@@ -126,7 +146,7 @@ def import_op_list(filename: str, data: bytes, user):
 
     for offset, raw in enumerate(data_rows, start=2):  # header is row 1
         # Map this row's cells to fields by header position.
-        record = {"name": "", "phone": "", "notes": ""}
+        record = {"name": "", "phone": "", "notes": "", "consulted_on": ""}
         for col, field in enumerate(headers):
             if field is None or col >= len(raw):
                 continue
@@ -140,6 +160,13 @@ def import_op_list(filename: str, data: bytes, user):
             errors.append({"row": offset, "message": "name is required"})
             continue
 
+        consulted_on = None
+        if record["consulted_on"]:
+            consulted_on = _parse_consult_date(record["consulted_on"])
+            if consulted_on is None:
+                errors.append({"row": offset, "message": "consult date must be DD-MM-YYYY"})
+                continue
+
         key = record["phone"] or record["name"].lower()
         if key in seen:
             duplicates += 1
@@ -151,6 +178,7 @@ def import_op_list(filename: str, data: bytes, user):
                 name=record["name"],
                 phone=record["phone"][:20],
                 notes=record["notes"],
+                consulted_on=consulted_on,
                 source=InquirySource.OP_IMPORT,
                 status=InquiryStatus.NEW,
                 created_by=user,

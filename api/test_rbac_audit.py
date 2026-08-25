@@ -49,6 +49,11 @@ OPERATIONS = [
         '{ activities(inquiryId: "999999") { id } }',
         {"ADMIN", "PRO"},
     ),
+    (
+        "opConsultWorklist",
+        "{ opConsultWorklist { id } }",
+        {"ADMIN", "PRO"},
+    ),
     ("followUps", '{ followUps(patientId: "1") { id } }', {"ADMIN", "PRO"}),
     ("dueFollowUps", "{ dueFollowUps { id } }", {"ADMIN", "PRO"}),
     ("dueFollowUpCount", "{ dueFollowUpCount }", {"ADMIN", "PRO"}),
@@ -225,6 +230,11 @@ OPERATIONS = [
         "setContactConsent",
         'mutation { setContactConsent(consent: GRANTED, doNotContact: false,'
         ' inquiryId: "999999") { contactConsent } }',
+        {"PRO"},
+    ),
+    (
+        "setConsulted",
+        'mutation { setConsulted(inquiryId: "999999", consultedOn: "2026-01-01") { id } }',
         {"PRO"},
     ),
     (
