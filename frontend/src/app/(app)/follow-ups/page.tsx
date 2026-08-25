@@ -30,7 +30,16 @@ type DueFollowUp = {
   id: string;
   note: string;
   followUpDate: string;
-  patient: { id: string; patientId: string; name: string };
+  kind: string;
+  subjectName: string;
+  patient: { id: string; patientId: string; name: string } | null;
+  inquiry: { id: string; name: string } | null;
+};
+
+const KIND_LABEL: Record<string, string> = {
+  AFTERCARE: "Aftercare",
+  OP_NUDGE: "OP nudge",
+  MANUAL: "",
 };
 
 type Result = { dueFollowUps: DueFollowUp[] };
@@ -107,7 +116,7 @@ export default function FollowUpsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Patient</th>
+                    <th className="py-2 pr-4 font-medium">Who</th>
                     <th className="py-2 pr-4 font-medium">Due</th>
                     <th className="py-2 pr-4 font-medium">Note</th>
                     <th className="py-2 font-medium">
@@ -121,13 +130,24 @@ export default function FollowUpsPage() {
                       <td className="py-2.5 pr-4">
                         <button
                           type="button"
-                          onClick={() => router.push(`/patients/${r.patient.id}`)}
+                          onClick={() =>
+                            router.push(
+                              r.patient
+                                ? `/patients/${r.patient.id}`
+                                : "/inquiries"
+                            )
+                          }
                           className="text-left font-medium hover:underline"
                         >
-                          {r.patient.name}
+                          {r.subjectName}
                         </button>
-                        <span className="block font-mono text-xs text-muted-foreground">
-                          {r.patient.patientId}
+                        <span className="block text-xs text-muted-foreground">
+                          {r.patient ? (
+                            <span className="font-mono">{r.patient.patientId}</span>
+                          ) : (
+                            "Lead"
+                          )}
+                          {KIND_LABEL[r.kind] ? ` · ${KIND_LABEL[r.kind]}` : ""}
                         </span>
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap">

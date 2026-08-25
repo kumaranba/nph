@@ -20,8 +20,8 @@ from .food_report import build_food_vendor_list, build_patient_food_report
 from .models import (
     Activity, ActivityKind, AdditionalCharge, Admission, AdmissionStatus, Bed,
     BedStatus, ConsentStatus, Fee, Attendance, AttendanceStatus, FollowUp,
-    FoodPreference, FoodRate, Gender, Inquiry, InquirySource, InquiryStatus,
-    LostReason, Invoice,
+    FollowUpKind, FoodPreference, FoodRate, Gender, Inquiry, InquirySource,
+    InquiryStatus, LostReason, Invoice,
     InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt, Room,
     Staff, StaffDesignation, StaffMealRate, SystemSetting, Tag, TagCategory,
     User, UserRole, VitalReading, VitalsThreshold,
@@ -379,6 +379,42 @@ def _log_activity(kind, body, *, inquiry=None, patient=None, user=None, outcome=
     return Activity.objects.create(
         inquiry=inquiry, patient=patient, type=kind,
         body=body, outcome=outcome or "", created_by=user,
+    )
+
+
+# Auto-scheduled follow-up cadences (R6).
+AFTERCARE_DAYS = 30      # aftercare review after discharge
+OP_NUDGE_DAYS = 3        # conversion nudge after an OP consult
+
+
+def _schedule_aftercare(admission, discharge_date, user=None):
+    """Create the +30-day aftercare follow-up for a discharge. Idempotent — one
+    per admission."""
+    if FollowUp.objects.filter(
+        admission=admission, kind=FollowUpKind.AFTERCARE
+    ).exists():
+        return None
+    return FollowUp.objects.create(
+        patient=admission.patient, admission=admission,
+        kind=FollowUpKind.AFTERCARE,
+        note='Aftercare review',
+        follow_up_date=discharge_date + timedelta(days=AFTERCARE_DAYS),
+        created_by=user,
+    )
+
+
+def _schedule_op_nudge(inquiry, consulted_on, user=None):
+    """Create the +3-day conversion nudge for an OP consult. Idempotent — one
+    open nudge per inquiry."""
+    if FollowUp.objects.filter(
+        inquiry=inquiry, kind=FollowUpKind.OP_NUDGE, is_done=False
+    ).exists():
+        return None
+    return FollowUp.objects.create(
+        inquiry=inquiry, kind=FollowUpKind.OP_NUDGE,
+        note='OP consult follow-up',
+        follow_up_date=consulted_on + timedelta(days=OP_NUDGE_DAYS),
+        created_by=user,
     )
 
 
@@ -1462,7 +1498,7 @@ class Query:
         return (
             FollowUp.objects
             .filter(is_done=False, follow_up_date__lte=_today())
-            .select_related('patient', 'admission', 'created_by')
+            .select_related('patient', 'inquiry', 'admission', 'created_by')
             .order_by('follow_up_date', 'id')
         )
 
@@ -2323,6 +2359,9 @@ class Mutation:
             # Tag the patient Discharged (surfaces in search / tag filters).
             _set_discharged_tag(admission.patient, True)
 
+            # Schedule the +30-day aftercare follow-up (idempotent).
+            _schedule_aftercare(admission, d, user)
+
             # Free the bed if one was assigned.
             if admission.bed is not None:
                 admission.bed.status = BedStatus.VACANT
@@ -2569,7 +2608,7 @@ class Mutation:
         if not name:
             raise GraphQLError('Inquiry name is required.')
         user = info.context.request.user
-        return Inquiry.objects.create(
+        inquiry = Inquiry.objects.create(
             name=name,
             phone=(data.phone or '').strip(),
             source=data.source.value,
@@ -2579,6 +2618,9 @@ class Mutation:
             assigned_to=user,
             created_by=user,
         )
+        if data.consulted_on is not None:
+            _schedule_op_nudge(inquiry, data.consulted_on, user)
+        return inquiry
 
     # Mark (or clear) the outpatient consultation date on a lead. Populating it
     # puts the lead on the "consulted — not admitted" worklist. PRO only.
@@ -2598,10 +2640,15 @@ class Mutation:
             raise GraphQLError('Consultation date cannot be in the future.')
         inquiry.consulted_on = consulted_on
         inquiry.save(update_fields=['consulted_on', 'updated_at'])
-        body = (
-            f'Marked consulted on {consulted_on:%d-%m-%Y}'
-            if consulted_on is not None else 'Cleared consultation date'
-        )
+        if consulted_on is not None:
+            body = f'Marked consulted on {consulted_on:%d-%m-%Y}'
+            _schedule_op_nudge(inquiry, consulted_on, info.context.request.user)
+        else:
+            body = 'Cleared consultation date'
+            # Drop the pending nudge if the consult date is removed.
+            inquiry.follow_ups.filter(
+                kind=FollowUpKind.OP_NUDGE, is_done=False
+            ).delete()
         _log_activity(ActivityKind.SYSTEM, body, inquiry=inquiry,
                       user=info.context.request.user)
         return inquiry
@@ -2824,7 +2871,8 @@ class Mutation:
                 body += f' — {follow_up.note}'
             _log_activity(
                 ActivityKind.FOLLOW_UP, body,
-                patient=follow_up.patient, user=info.context.request.user,
+                patient=follow_up.patient, inquiry=follow_up.inquiry,
+                user=info.context.request.user,
             )
         return follow_up
 

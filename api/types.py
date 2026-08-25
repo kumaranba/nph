@@ -380,10 +380,17 @@ class AttendanceType:
 @strawberry_django.type(models.FollowUp)
 class FollowUpType:
     id: auto
-    patient: PatientType
+    patient: Optional[PatientType]
+    inquiry: Optional["InquiryType"]
     admission: Optional[AdmissionType]
+    kind: auto
     note: auto
     follow_up_date: auto
     is_done: auto
     created_by: Optional[UserType]
     created_at: auto
+
+    # A display name for the follow-up's subject (patient or lead).
+    @strawberry.field
+    def subject_name(self) -> str:
+        return self.subject_name
