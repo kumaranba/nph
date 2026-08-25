@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { ConsentControl } from "@/components/consent-control";
+import { ContactActions } from "@/components/contact-actions";
 import { ImportOpListModal } from "@/components/import-op-list-modal";
 import { LinkInquiryModal } from "@/components/link-inquiry-modal";
 import { NewInquiryModal } from "@/components/new-inquiry-modal";
@@ -99,6 +100,7 @@ export default function InquiriesPage() {
   const [linkTarget, setLinkTarget] = useState<Inquiry | null>(null);
   const [lostTarget, setLostTarget] = useState<Inquiry | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Inquiry | null>(null);
+  const [histKey, setHistKey] = useState(0);
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -430,7 +432,20 @@ export default function InquiriesPage() {
                 canEdit={canManage}
                 onChanged={() => refetch()}
               />
-              <ActivityTimeline inquiryId={historyTarget.id} canAdd={canManage} />
+              {canManage && historyTarget.phone ? (
+                <ContactActions
+                  phone={historyTarget.phone}
+                  inquiryId={historyTarget.id}
+                  consent={historyTarget.contactConsent}
+                  doNotContact={historyTarget.doNotContact}
+                  onLogged={() => setHistKey((k) => k + 1)}
+                />
+              ) : null}
+              <ActivityTimeline
+                inquiryId={historyTarget.id}
+                canAdd={canManage}
+                refreshKey={histKey}
+              />
             </div>
           </div>
         </div>
