@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@apollo/client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,16 +47,23 @@ export function ActivityTimeline({
   inquiryId,
   patientId,
   canAdd,
+  refreshKey,
 }: {
   inquiryId?: string;
   patientId?: string;
   canAdd: boolean;
+  // Bump to re-fetch after an external event (e.g. a logged contact).
+  refreshKey?: number;
 }) {
   const variables = { inquiryId: inquiryId ?? null, patientId: patientId ?? null };
   const { data, loading, refetch } = useQuery<Result>(ACTIVITIES, {
     variables,
     fetchPolicy: "cache-and-network",
   });
+
+  useEffect(() => {
+    if (refreshKey !== undefined) refetch();
+  }, [refreshKey, refetch]);
 
   const [type, setType] = useState<string>("NOTE");
   const [body, setBody] = useState("");

@@ -13,6 +13,7 @@ import { EditPatientModal } from "@/components/edit-patient-modal";
 import { PatientDocumentsPanel } from "@/components/patient-documents-panel";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { ConsentControl } from "@/components/consent-control";
+import { ContactActions } from "@/components/contact-actions";
 import { PatientFollowUpsPanel } from "@/components/patient-follow-ups-panel";
 import { ReadmitModal } from "@/components/readmit-modal";
 import { formatDate } from "@/lib/format-date";
@@ -75,6 +76,7 @@ export default function PatientProfilePage() {
   const [showDischarge, setShowDischarge] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showReadmit, setShowReadmit] = useState(false);
+  const [actKey, setActKey] = useState(0);
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -322,9 +324,19 @@ export default function PatientProfilePage() {
               canEdit={canManageFollowUps}
               onChanged={() => refetch()}
             />
+            {canManageFollowUps && patient.guardianPhone ? (
+              <ContactActions
+                phone={patient.guardianPhone}
+                patientId={patient.id}
+                consent={patient.contactConsent}
+                doNotContact={patient.doNotContact}
+                onLogged={() => setActKey((k) => k + 1)}
+              />
+            ) : null}
             <ActivityTimeline
               patientId={patient.id}
               canAdd={canManageFollowUps}
+              refreshKey={actKey}
             />
           </CardContent>
         </Card>
