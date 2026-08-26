@@ -652,15 +652,30 @@ class Inquiry(models.Model):
         return f'Inquiry #{self.pk} — {self.name} ({self.status})'
 
 
+class FollowUpKind(models.TextChoices):
+    MANUAL = 'MANUAL', 'Manual'
+    AFTERCARE = 'AFTERCARE', 'Aftercare'      # auto-scheduled on discharge
+    OP_NUDGE = 'OP_NUDGE', 'OP nudge'          # auto-scheduled on OP consult
+
+
 class FollowUp(models.Model):
-    """A dated follow-up reminder for a patient (typically a discharged one).
-    Surfaced in the in-app bell when due. Separate from any notification log."""
+    """A dated follow-up reminder for a patient (typically a discharged one) or
+    a prospective-patient lead (an inquiry). Exactly one of patient / inquiry is
+    set. Surfaced in the in-app bell when due."""
     patient = models.ForeignKey(
-        Patient, on_delete=models.CASCADE, related_name='follow_ups'
+        Patient, on_delete=models.CASCADE, related_name='follow_ups',
+        null=True, blank=True,
+    )
+    inquiry = models.ForeignKey(
+        'Inquiry', on_delete=models.CASCADE, related_name='follow_ups',
+        null=True, blank=True,
     )
     admission = models.ForeignKey(
         Admission, on_delete=models.SET_NULL, related_name='follow_ups',
         null=True, blank=True,
+    )
+    kind = models.CharField(
+        max_length=10, choices=FollowUpKind.choices, default=FollowUpKind.MANUAL
     )
     note = models.TextField(blank=True)
     follow_up_date = models.DateField()
@@ -674,8 +689,16 @@ class FollowUp(models.Model):
     class Meta:
         ordering = ['follow_up_date', 'id']
 
+    @property
+    def subject_name(self) -> str:
+        if self.patient_id:
+            return self.patient.name
+        if self.inquiry_id:
+            return self.inquiry.name
+        return '—'
+
     def __str__(self):
-        return f'FollowUp #{self.pk} — {self.patient.name} on {self.follow_up_date}'
+        return f'FollowUp #{self.pk} — {self.subject_name} on {self.follow_up_date}'
 
 
 class ActivityKind(models.TextChoices):

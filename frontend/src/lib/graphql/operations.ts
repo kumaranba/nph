@@ -828,9 +828,15 @@ export const DUE_FOLLOW_UPS = gql`
       id
       note
       followUpDate
+      kind
+      subjectName
       patient {
         id
         patientId
+        name
+      }
+      inquiry {
+        id
         name
       }
     }
