@@ -10,6 +10,7 @@ import {
   CopyCheck,
   HeartPulse,
   History,
+  Kanban,
   LayoutDashboard,
   MessageSquarePlus,
   Receipt,
@@ -90,6 +91,12 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Inquiries",
         href: "/inquiries",
         icon: MessageSquarePlus,
+        roles: ["PRO", "ADMIN"],
+      },
+      {
+        label: "Pipeline",
+        href: "/pipeline",
+        icon: Kanban,
         roles: ["PRO", "ADMIN"],
       },
       {
