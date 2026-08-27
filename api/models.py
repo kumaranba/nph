@@ -603,6 +603,44 @@ class LostReason(models.TextChoices):
     OTHER = 'OTHER', 'Other'
 
 
+class ReferrerKind(models.TextChoices):
+    DOCTOR = 'DOCTOR', 'Doctor'
+    HOSPITAL = 'HOSPITAL', 'Hospital / clinic'
+    EX_PATIENT = 'EX_PATIENT', 'Former patient / family'
+    STAFF = 'STAFF', 'Staff'
+    OTHER = 'OTHER', 'Other'
+
+
+class Referrer(models.Model):
+    """A referral source — a doctor, hospital, former patient, or staff member
+    who sends prospective patients. A ``REFERRAL``-source inquiry may point at
+    one, letting us credit and rank referrers by leads and conversions.
+    Managed by the PRO role; ADMIN is view-only."""
+    name = models.CharField(max_length=255)
+    kind = models.CharField(
+        max_length=12, choices=ReferrerKind.choices, default=ReferrerKind.DOCTOR
+    )
+    # e.g. the clinic/hospital a referring doctor practises at.
+    organization = models.CharField(max_length=255, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    email = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    # Deactivated referrers are hidden from the picker but kept for history.
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, related_name='created_referrers',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name', 'id']
+
+    def __str__(self):
+        return f'Referrer #{self.pk} — {self.name} ({self.kind})'
+
+
 class Inquiry(models.Model):
     """A prospective-patient inquiry, from any intake channel. Managed by the
     PRO role; ``status`` tracks its pipeline stage and it converts to a Patient
@@ -631,6 +669,11 @@ class Inquiry(models.Model):
     # The PRO who owns this lead. Defaults to the creator.
     assigned_to = models.ForeignKey(
         User, on_delete=models.SET_NULL, related_name='assigned_inquiries',
+        null=True, blank=True,
+    )
+    # Who referred this lead (typically set when source is REFERRAL).
+    referrer = models.ForeignKey(
+        'Referrer', on_delete=models.SET_NULL, related_name='inquiries',
         null=True, blank=True,
     )
     # Set when the inquiry converts to a real patient.

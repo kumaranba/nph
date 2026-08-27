@@ -314,7 +314,23 @@ class InquiryType:
     consulted_on: auto
     notes: auto
     assigned_to: Optional[UserType]
+    referrer: Optional["ReferrerType"]
     patient: Optional[PatientType]
+    created_by: Optional[UserType]
+    created_at: auto
+    updated_at: auto
+
+
+@strawberry_django.type(models.Referrer)
+class ReferrerType:
+    id: auto
+    name: auto
+    kind: auto
+    organization: auto
+    phone: auto
+    email: auto
+    notes: auto
+    is_active: auto
     created_by: Optional[UserType]
     created_at: auto
     updated_at: auto

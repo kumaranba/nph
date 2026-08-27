@@ -23,7 +23,8 @@ from .models import (
     BedStatus, ConsentStatus, Fee, Attendance, AttendanceStatus, FollowUp,
     FollowUpKind, FoodPreference, FoodRate, Gender, Inquiry, InquirySource,
     InquiryStatus, LostReason, Invoice,
-    InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt, Room,
+    InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
+    Referrer, ReferrerKind, Room,
     Staff, StaffDesignation, StaffMealRate, SystemSetting, Tag, TagCategory,
     User, UserRole, VitalReading, VitalsThreshold,
 )
@@ -31,7 +32,7 @@ from .permissions import login_required, require_roles
 from .types import (
     ActivityType, AdditionalChargeType, AdmissionType, AttendanceType, BedType,
     FeeType, FollowUpType, FoodRateType, InquiryType, InvoiceType, PatientType,
-    PaymentAccountType, PaymentReceiptType, PaymentType, RoomType,
+    PaymentAccountType, PaymentReceiptType, PaymentType, ReferrerType, RoomType,
     StaffMealRateType, StaffType, TagType, UserType, VitalReadingType,
     VitalsThresholdType,
 )
@@ -122,6 +123,16 @@ class ConsentStatusEnum(Enum):
     UNKNOWN = 'UNKNOWN'
     GRANTED = 'GRANTED'
     DECLINED = 'DECLINED'
+
+
+@strawberry.enum
+class ReferrerKindEnum(Enum):
+    """GraphQL enum for Referrer.kind (mirrors models.ReferrerKind)."""
+    DOCTOR = 'DOCTOR'
+    HOSPITAL = 'HOSPITAL'
+    EX_PATIENT = 'EX_PATIENT'
+    STAFF = 'STAFF'
+    OTHER = 'OTHER'
 
 
 @strawberry.type
@@ -356,6 +367,40 @@ class CreateInquiryInput:
     phone: Optional[str] = ""
     notes: Optional[str] = ""
     consulted_on: Optional[date] = None
+    referrer_id: Optional[strawberry.ID] = None
+
+
+@strawberry.input
+class CreateReferrerInput:
+    """A new referral source. Only name is required; kind defaults to DOCTOR."""
+    name: str
+    kind: Optional[ReferrerKindEnum] = None
+    organization: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+@strawberry.input
+class UpdateReferrerInput:
+    """Partial update of a referral source. Unset fields are left unchanged."""
+    name: Optional[str] = strawberry.UNSET
+    kind: Optional[ReferrerKindEnum] = strawberry.UNSET
+    organization: Optional[str] = strawberry.UNSET
+    phone: Optional[str] = strawberry.UNSET
+    email: Optional[str] = strawberry.UNSET
+    notes: Optional[str] = strawberry.UNSET
+    is_active: Optional[bool] = strawberry.UNSET
+
+
+@strawberry.type
+class ReferrerStat:
+    """A referral source paired with its lead and conversion counts, for the
+    referrer leaderboard."""
+    referrer: ReferrerType
+    leads: int
+    converted: int
+    conversion_rate: float
 
 
 @strawberry.input
@@ -423,6 +468,16 @@ DUE_SOON_WINDOW_DAYS = 7
 def _today() -> date:
     """Indirection so tests can pin "today" deterministically."""
     return date.today()
+
+
+def _resolve_referrer(referrer_id):
+    """Look up a Referrer by id (or None if not given). Raises for a bad id."""
+    if referrer_id is None:
+        return None
+    try:
+        return Referrer.objects.get(pk=referrer_id)
+    except Referrer.DoesNotExist:
+        raise GraphQLError('Referrer not found.')
 
 
 def _log_activity(kind, body, *, inquiry=None, patient=None, user=None, outcome=""):
@@ -1473,7 +1528,9 @@ class Query:
         status: Optional[InquiryStatusEnum] = None,
         search: Optional[str] = None,
     ) -> List[InquiryType]:
-        qs = Inquiry.objects.select_related('patient', 'created_by', 'assigned_to')
+        qs = Inquiry.objects.select_related(
+            'patient', 'created_by', 'assigned_to', 'referrer'
+        )
         if status is not None:
             qs = qs.filter(status=status.value)
         term = (search or '').strip()
@@ -1488,6 +1545,44 @@ class Query:
         return User.objects.filter(
             role=UserRole.PRO, is_active=True
         ).order_by('email')
+
+    # Referral sources. By default active only (for the inquiry picker); pass
+    # include_inactive to see the full list on the management page. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def referrers(
+        self, info: Info, include_inactive: bool = False
+    ) -> List[ReferrerType]:
+        qs = Referrer.objects.all()
+        if not include_inactive:
+            qs = qs.filter(is_active=True)
+        return qs.order_by('name', 'id')
+
+    # Referrer leaderboard: each referral source with its lead and conversion
+    # counts, most leads first. Referrers with no leads are omitted. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def referrer_stats(self, info: Info) -> List[ReferrerStat]:
+        rows = (
+            Referrer.objects.annotate(
+                leads=Count('inquiries'),
+                converted=Count(
+                    'inquiries',
+                    filter=Q(inquiries__status=InquiryStatus.ADMITTED),
+                ),
+            )
+            .filter(leads__gt=0)
+            .order_by('-leads', 'name', 'id')
+        )
+        return [
+            ReferrerStat(
+                referrer=r,
+                leads=r.leads,
+                converted=r.converted,
+                conversion_rate=(r.converted / r.leads) if r.leads else 0.0,
+            )
+            for r in rows
+        ]
 
     # Inquiry-pipeline analytics over an optional creation-date range (the
     # monthly trend always covers the last six months). PRO + ADMIN.
@@ -2700,18 +2795,102 @@ class Mutation:
         if not name:
             raise GraphQLError('Inquiry name is required.')
         user = info.context.request.user
+        referrer = _resolve_referrer(data.referrer_id)
         inquiry = Inquiry.objects.create(
             name=name,
             phone=(data.phone or '').strip(),
             source=data.source.value,
             notes=(data.notes or '').strip(),
             consulted_on=data.consulted_on,
+            referrer=referrer,
             status=InquiryStatus.NEW,
             assigned_to=user,
             created_by=user,
         )
         if data.consulted_on is not None:
             _schedule_op_nudge(inquiry, data.consulted_on, user)
+        return inquiry
+
+    # --- PRM: referral sources (PRO only; ADMIN is view-only) --------------
+    # Add a referral source (doctor, hospital, former patient, staff). PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def create_referrer(
+        self, info: Info, data: CreateReferrerInput
+    ) -> ReferrerType:
+        name = (data.name or '').strip()
+        if not name:
+            raise GraphQLError('Referrer name is required.')
+        return Referrer.objects.create(
+            name=name,
+            kind=data.kind.value if data.kind else ReferrerKind.DOCTOR,
+            organization=(data.organization or '').strip(),
+            phone=(data.phone or '').strip(),
+            email=(data.email or '').strip(),
+            notes=(data.notes or '').strip(),
+            created_by=info.context.request.user,
+        )
+
+    # Edit a referral source. Unset fields are left unchanged; is_active toggles
+    # whether it appears in the picker (history is preserved). PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def update_referrer(
+        self, info: Info, referrer_id: strawberry.ID, data: UpdateReferrerInput
+    ) -> ReferrerType:
+        try:
+            referrer = Referrer.objects.get(pk=referrer_id)
+        except Referrer.DoesNotExist:
+            raise GraphQLError('Referrer not found.')
+        fields = []
+        if data.name is not strawberry.UNSET:
+            name = (data.name or '').strip()
+            if not name:
+                raise GraphQLError('Referrer name cannot be empty.')
+            referrer.name = name
+            fields.append('name')
+        if data.kind is not strawberry.UNSET and data.kind is not None:
+            referrer.kind = data.kind.value
+            fields.append('kind')
+        if data.organization is not strawberry.UNSET:
+            referrer.organization = (data.organization or '').strip()
+            fields.append('organization')
+        if data.phone is not strawberry.UNSET:
+            referrer.phone = (data.phone or '').strip()
+            fields.append('phone')
+        if data.email is not strawberry.UNSET:
+            referrer.email = (data.email or '').strip()
+            fields.append('email')
+        if data.notes is not strawberry.UNSET:
+            referrer.notes = (data.notes or '').strip()
+            fields.append('notes')
+        if data.is_active is not strawberry.UNSET and data.is_active is not None:
+            referrer.is_active = data.is_active
+            fields.append('is_active')
+        if fields:
+            referrer.save(update_fields=fields + ['updated_at'])
+        return referrer
+
+    # Attach, change, or clear (referrer_id=null) the referrer on a lead. Logs
+    # the change on the timeline. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def set_inquiry_referrer(
+        self,
+        info: Info,
+        inquiry_id: strawberry.ID,
+        referrer_id: Optional[strawberry.ID] = None,
+    ) -> InquiryType:
+        try:
+            inquiry = Inquiry.objects.get(pk=inquiry_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Inquiry not found.')
+        referrer = _resolve_referrer(referrer_id)
+        inquiry.referrer = referrer
+        inquiry.save(update_fields=['referrer', 'updated_at'])
+        body = f'Referred by {referrer.name}' if referrer else 'Cleared referrer'
+        _log_activity(ActivityKind.SYSTEM, body, inquiry=inquiry,
+                      user=info.context.request.user)
         return inquiry
 
     # Mark (or clear) the outpatient consultation date on a lead. Populating it

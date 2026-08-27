@@ -45,6 +45,8 @@ OPERATIONS = [
     ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
     ("proUsers", "{ proUsers { id } }", {"ADMIN", "PRO"}),
     ("prmAnalytics", "{ prmAnalytics { totalLeads } }", {"ADMIN", "PRO"}),
+    ("referrers", "{ referrers { id } }", {"ADMIN", "PRO"}),
+    ("referrerStats", "{ referrerStats { leads } }", {"ADMIN", "PRO"}),
     (
         "activities",
         '{ activities(inquiryId: "999999") { id } }',
@@ -247,6 +249,21 @@ OPERATIONS = [
     (
         "markFollowUpDone",
         'mutation { markFollowUpDone(followUpId: "999999") { id } }',
+        {"PRO"},
+    ),
+    (
+        "createReferrer",
+        'mutation { createReferrer(data: {name: "x"}) { id } }',
+        {"PRO"},
+    ),
+    (
+        "updateReferrer",
+        'mutation { updateReferrer(referrerId: "999999", data: {name: "y"}) { id } }',
+        {"PRO"},
+    ),
+    (
+        "setInquiryReferrer",
+        'mutation { setInquiryReferrer(inquiryId: "999999", referrerId: "1") { id } }',
         {"PRO"},
     ),
 ]
