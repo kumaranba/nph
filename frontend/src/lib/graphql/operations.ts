@@ -698,6 +698,10 @@ export const INQUIRIES = gql`
         id
         email
       }
+      referrer {
+        id
+        name
+      }
       patient {
         id
         patientId
@@ -1195,6 +1199,68 @@ export const PRM_ANALYTICS = gql`
         email
         owned
         converted
+      }
+    }
+  }
+`;
+
+// --- PRM: referral sources ------------------------------------------------
+
+export const REFERRERS = gql`
+  query Referrers($includeInactive: Boolean) {
+    referrers(includeInactive: $includeInactive) {
+      id
+      name
+      kind
+      organization
+      phone
+      email
+      notes
+      isActive
+    }
+  }
+`;
+
+export const REFERRER_STATS = gql`
+  query ReferrerStats {
+    referrerStats {
+      referrer {
+        id
+        name
+        kind
+        organization
+      }
+      leads
+      converted
+      conversionRate
+    }
+  }
+`;
+
+export const CREATE_REFERRER = gql`
+  mutation CreateReferrer($data: CreateReferrerInput!) {
+    createReferrer(data: $data) {
+      id
+    }
+  }
+`;
+
+export const UPDATE_REFERRER = gql`
+  mutation UpdateReferrer($id: ID!, $data: UpdateReferrerInput!) {
+    updateReferrer(referrerId: $id, data: $data) {
+      id
+      isActive
+    }
+  }
+`;
+
+export const SET_INQUIRY_REFERRER = gql`
+  mutation SetInquiryReferrer($id: ID!, $referrerId: ID) {
+    setInquiryReferrer(inquiryId: $id, referrerId: $referrerId) {
+      id
+      referrer {
+        id
+        name
       }
     }
   }

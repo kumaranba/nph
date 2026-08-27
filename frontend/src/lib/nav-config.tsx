@@ -6,6 +6,7 @@ import {
   CalendarClock,
   ChartBar,
   ChefHat,
+  Contact,
   HeartPulse,
   History,
   LayoutDashboard,
@@ -94,6 +95,12 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Follow-ups",
         href: "/follow-ups",
         icon: CalendarClock,
+        roles: ["PRO", "ADMIN"],
+      },
+      {
+        label: "Referrers",
+        href: "/referrers",
+        icon: Contact,
         roles: ["PRO", "ADMIN"],
       },
       {
