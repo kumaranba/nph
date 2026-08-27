@@ -17,6 +17,7 @@ from .billing import BillingService, build_discharge_preview
 from .fees import FeeError, FeeService
 from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
+from .prm_analytics import build_prm_analytics
 from .models import (
     Activity, ActivityKind, AdditionalCharge, Admission, AdmissionStatus, Bed,
     BedStatus, ConsentStatus, Fee, Attendance, AttendanceStatus, FollowUp,
@@ -128,6 +129,56 @@ class ConsentResult:
     """The contact-preference state after a set_contact_consent call."""
     contact_consent: str
     do_not_contact: bool
+
+
+@strawberry.type
+class PrmSourceStat:
+    source: str
+    leads: int
+    converted: int
+    conversion_rate: float
+
+
+@strawberry.type
+class PrmStageStat:
+    stage: str
+    count: int
+
+
+@strawberry.type
+class PrmLostReasonStat:
+    reason: str
+    count: int
+
+
+@strawberry.type
+class PrmMonthStat:
+    month: str
+    leads: int
+
+
+@strawberry.type
+class PrmProStat:
+    email: str
+    owned: int
+    converted: int
+
+
+@strawberry.type
+class PrmAnalyticsType:
+    """Inquiry-pipeline analytics: totals, funnel by source and stage, lost
+    reasons, a six-month lead-volume trend, and per-PRO productivity."""
+    total_leads: int
+    converted: int
+    lost: int
+    open: int
+    conversion_rate: float
+    avg_days_to_convert: Optional[float]
+    by_source: List[PrmSourceStat]
+    by_stage: List[PrmStageStat]
+    lost_reasons: List[PrmLostReasonStat]
+    monthly: List[PrmMonthStat]
+    by_pro: List[PrmProStat]
 
 
 @strawberry.enum
@@ -1437,6 +1488,47 @@ class Query:
         return User.objects.filter(
             role=UserRole.PRO, is_active=True
         ).order_by('email')
+
+    # Inquiry-pipeline analytics over an optional creation-date range (the
+    # monthly trend always covers the last six months). PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def prm_analytics(
+        self,
+        info: Info,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> PrmAnalyticsType:
+        a = build_prm_analytics(date_from, date_to, today=_today())
+        return PrmAnalyticsType(
+            total_leads=a.total_leads,
+            converted=a.converted,
+            lost=a.lost,
+            open=a.open,
+            conversion_rate=a.conversion_rate,
+            avg_days_to_convert=a.avg_days_to_convert,
+            by_source=[
+                PrmSourceStat(
+                    source=s.source, leads=s.leads, converted=s.converted,
+                    conversion_rate=s.conversion_rate,
+                )
+                for s in a.by_source
+            ],
+            by_stage=[
+                PrmStageStat(stage=s.stage, count=s.count) for s in a.by_stage
+            ],
+            lost_reasons=[
+                PrmLostReasonStat(reason=r.reason, count=r.count)
+                for r in a.lost_reasons
+            ],
+            monthly=[
+                PrmMonthStat(month=m.month, leads=m.leads) for m in a.monthly
+            ],
+            by_pro=[
+                PrmProStat(email=p.email, owned=p.owned, converted=p.converted)
+                for p in a.by_pro
+            ],
+        )
 
     # The conversion worklist: leads that consulted as outpatients but haven't
     # been admitted or lost yet, oldest consultation first. PRO + ADMIN.

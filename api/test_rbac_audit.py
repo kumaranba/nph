@@ -44,6 +44,7 @@ OPERATIONS = [
     # --- Queries: ADMIN + PRO (PRM) ---------------------------------------
     ("inquiries", "{ inquiries { id } }", {"ADMIN", "PRO"}),
     ("proUsers", "{ proUsers { id } }", {"ADMIN", "PRO"}),
+    ("prmAnalytics", "{ prmAnalytics { totalLeads } }", {"ADMIN", "PRO"}),
     (
         "activities",
         '{ activities(inquiryId: "999999") { id } }',

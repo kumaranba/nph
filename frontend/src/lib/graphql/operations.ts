@@ -1161,3 +1161,41 @@ export const SET_CONTACT_CONSENT = gql`
     }
   }
 `;
+
+// --- PRM: analytics dashboard (Phase 2) -----------------------------------
+
+export const PRM_ANALYTICS = gql`
+  query PrmAnalytics($dateFrom: Date, $dateTo: Date) {
+    prmAnalytics(dateFrom: $dateFrom, dateTo: $dateTo) {
+      totalLeads
+      converted
+      lost
+      open
+      conversionRate
+      avgDaysToConvert
+      bySource {
+        source
+        leads
+        converted
+        conversionRate
+      }
+      byStage {
+        stage
+        count
+      }
+      lostReasons {
+        reason
+        count
+      }
+      monthly {
+        month
+        leads
+      }
+      byPro {
+        email
+        owned
+        converted
+      }
+    }
+  }
+`;
