@@ -18,6 +18,7 @@ from .fees import FeeError, FeeService
 from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
 from .prm_analytics import build_prm_analytics
+from .phones import normalize_phone
 from .models import (
     Activity, ActivityKind, AdditionalCharge, Admission, AdmissionStatus, Bed,
     BedStatus, ConsentStatus, Fee, Attendance, AttendanceStatus, FollowUp,
@@ -371,6 +372,25 @@ class CreateInquiryInput:
 
 
 @strawberry.input
+class WebEnquiryInput:
+    """A prospective-patient enquiry submitted from the public website. No
+    authentication — validated and rate-limited server-side. ``company`` is a
+    honeypot: real users leave it blank."""
+    name: str
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    message: Optional[str] = ""
+    company: Optional[str] = ""      # honeypot — must stay empty
+
+
+@strawberry.type
+class WebEnquiryResult:
+    """Public-safe acknowledgement of a web enquiry (no internal ids leaked)."""
+    ok: bool
+    message: str
+
+
+@strawberry.input
 class CreateReferrerInput:
     """A new referral source. Only name is required; kind defaults to DOCTOR."""
     name: str
@@ -468,6 +488,38 @@ DUE_SOON_WINDOW_DAYS = 7
 def _today() -> date:
     """Indirection so tests can pin "today" deterministically."""
     return date.today()
+
+
+# Public web-enquiry limits (anti-abuse).
+WEB_ENQUIRY_MAX_LEN = 2000       # message cap
+WEB_ENQUIRY_RATE = 5             # submissions per IP …
+WEB_ENQUIRY_WINDOW = 3600        # … per this many seconds
+
+
+def _client_ip(request) -> str:
+    """Best-effort client IP for rate limiting (first X-Forwarded-For hop, else
+    REMOTE_ADDR)."""
+    fwd = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if fwd:
+        return fwd.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '') or 'unknown'
+
+
+def _web_enquiry_throttled(request) -> bool:
+    """True when this IP has exceeded the web-enquiry submission rate. Uses the
+    Django cache (degrades gracefully if unavailable)."""
+    from django.core.cache import cache
+    key = f'web_enquiry_rate:{_client_ip(request)}'
+    try:
+        count = cache.get(key, 0)
+        if count >= WEB_ENQUIRY_RATE:
+            return True
+        # add() sets only if missing (starts the window); otherwise incr().
+        if not cache.add(key, 1, WEB_ENQUIRY_WINDOW):
+            cache.incr(key)
+    except Exception:  # noqa: BLE001 — never let a cache hiccup block intake
+        return False
+    return False
 
 
 def _resolve_referrer(referrer_id):
@@ -2784,6 +2836,62 @@ class Mutation:
             effective_from=eff,
             note=(note or '').strip(),
             created_by=info.context.request.user,
+        )
+
+    # --- PRM: public web-enquiry intake (NO auth) --------------------------
+    # A prospective patient submits the website enquiry form. Creates an
+    # unassigned WEB inquiry (status NEW) for PROs to pick up. Public, so it is
+    # honeypot-guarded and rate-limited, validated, and never leaks internal
+    # ids. Deliberately no @require_roles / @login_required.
+    @strawberry.mutation
+    def submit_web_enquiry(
+        self, info: Info, data: WebEnquiryInput
+    ) -> WebEnquiryResult:
+        # Honeypot: bots fill hidden fields. Pretend success, create nothing.
+        if (data.company or '').strip():
+            return WebEnquiryResult(ok=True, message='Thank you — we\'ll be in touch.')
+
+        request = info.context.request
+        if _web_enquiry_throttled(request):
+            raise GraphQLError(
+                'Too many submissions from this connection. Please try again later.'
+            )
+
+        name = (data.name or '').strip()
+        if not name:
+            raise GraphQLError('Please enter your name.')
+        if len(name) > 255:
+            raise GraphQLError('Name is too long.')
+
+        phone = normalize_phone(data.phone or '')[:20]
+        email = (data.email or '').strip()[:255]
+        message = (data.message or '').strip()[:WEB_ENQUIRY_MAX_LEN]
+        if not phone and not email:
+            raise GraphQLError('Please leave a phone number or email so we can reach you.')
+
+        # Fold the submitted email/message into notes (Inquiry has no email
+        # field); the phone lands on the inquiry proper for click-to-contact.
+        note_lines = []
+        if email:
+            note_lines.append(f'Email: {email}')
+        if message:
+            note_lines.append(message)
+        note_lines.append('— submitted via website')
+
+        inquiry = Inquiry.objects.create(
+            name=name,
+            phone=phone,
+            source=InquirySource.WEB,
+            status=InquiryStatus.NEW,
+            notes='\n'.join(note_lines),
+            created_by=None,      # anonymous submission
+        )
+        _log_activity(
+            ActivityKind.SYSTEM, 'Enquiry submitted via website',
+            inquiry=inquiry,
+        )
+        return WebEnquiryResult(
+            ok=True, message='Thank you — our team will contact you soon.'
         )
 
     # --- PRM: inquiry writes (PRO only; ADMIN is view-only) ----------------
