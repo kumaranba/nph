@@ -764,6 +764,16 @@ export const CREATE_INQUIRY = gql`
   }
 `;
 
+// Public, unauthenticated: the website enquiry form.
+export const SUBMIT_WEB_ENQUIRY = gql`
+  mutation SubmitWebEnquiry($data: WebEnquiryInput!) {
+    submitWebEnquiry(data: $data) {
+      ok
+      message
+    }
+  }
+`;
+
 export const UPDATE_INQUIRY_STATUS = gql`
   mutation UpdateInquiryStatus(
     $id: ID!
