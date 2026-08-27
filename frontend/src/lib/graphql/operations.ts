@@ -1275,3 +1275,39 @@ export const SET_INQUIRY_REFERRER = gql`
     }
   }
 `;
+
+// --- PRM: duplicate detection & merge -------------------------------------
+
+export const DUPLICATE_INQUIRY_GROUPS = gql`
+  query DuplicateInquiryGroups {
+    duplicateInquiryGroups {
+      key
+      inquiries {
+        id
+        name
+        phone
+        source
+        status
+        consultedOn
+        createdAt
+        assignedTo {
+          id
+          email
+        }
+        patient {
+          id
+          patientId
+          name
+        }
+      }
+    }
+  }
+`;
+
+export const MERGE_INQUIRIES = gql`
+  mutation MergeInquiries($primaryId: ID!, $duplicateId: ID!) {
+    mergeInquiries(primaryId: $primaryId, duplicateId: $duplicateId) {
+      id
+    }
+  }
+`;

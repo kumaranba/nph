@@ -19,6 +19,7 @@ from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
 from .prm_analytics import build_prm_analytics
 from .phones import normalize_phone
+from .dedup import MergeError, find_duplicate_groups, merge_inquiries
 from .models import (
     Activity, ActivityKind, AdditionalCharge, Admission, AdmissionStatus, Bed,
     BedStatus, ConsentStatus, Fee, Attendance, AttendanceStatus, FollowUp,
@@ -388,6 +389,14 @@ class WebEnquiryResult:
     """Public-safe acknowledgement of a web enquiry (no internal ids leaked)."""
     ok: bool
     message: str
+
+
+@strawberry.type
+class DuplicateGroupType:
+    """A cluster of inquiries that look like the same person (shared phone, or
+    a shared name when there's no phone). ``key`` is the matched value."""
+    key: str
+    inquiries: List[InquiryType]
 
 
 @strawberry.input
@@ -1634,6 +1643,16 @@ class Query:
                 conversion_rate=(r.converted / r.leads) if r.leads else 0.0,
             )
             for r in rows
+        ]
+
+    # Clusters of likely-duplicate inquiries (shared phone, or shared name when
+    # phoneless), for the merge review page. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def duplicate_inquiry_groups(self, info: Info) -> List[DuplicateGroupType]:
+        return [
+            DuplicateGroupType(key=key, inquiries=items)
+            for key, items in find_duplicate_groups()
         ]
 
     # Inquiry-pipeline analytics over an optional creation-date range (the
@@ -3125,6 +3144,32 @@ class Mutation:
                 user=info.context.request.user,
             )
         return inquiry
+
+    # Merge a duplicate inquiry into a primary (survivor). Re-parents the
+    # duplicate's timeline and follow-ups, backfills blanks, keeps the furthest
+    # stage, then deletes the duplicate. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def merge_inquiries(
+        self,
+        info: Info,
+        primary_id: strawberry.ID,
+        duplicate_id: strawberry.ID,
+    ) -> InquiryType:
+        try:
+            primary = Inquiry.objects.get(pk=primary_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Primary inquiry not found.')
+        try:
+            duplicate = Inquiry.objects.get(pk=duplicate_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Duplicate inquiry not found.')
+        try:
+            return merge_inquiries(
+                primary, duplicate, info.context.request.user
+            )
+        except MergeError as exc:
+            raise GraphQLError(str(exc))
 
     # Log a manual timeline entry (note / call / WhatsApp) on a lead or a
     # patient. Requires at least one of inquiry_id / patient_id. PRO only.

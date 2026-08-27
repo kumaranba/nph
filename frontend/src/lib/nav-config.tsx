@@ -7,6 +7,7 @@ import {
   ChartBar,
   ChefHat,
   Contact,
+  CopyCheck,
   HeartPulse,
   History,
   LayoutDashboard,
@@ -101,6 +102,12 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Referrers",
         href: "/referrers",
         icon: Contact,
+        roles: ["PRO", "ADMIN"],
+      },
+      {
+        label: "Duplicates",
+        href: "/duplicates",
+        icon: CopyCheck,
         roles: ["PRO", "ADMIN"],
       },
       {

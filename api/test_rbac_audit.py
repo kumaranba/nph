@@ -48,6 +48,11 @@ OPERATIONS = [
     ("referrers", "{ referrers { id } }", {"ADMIN", "PRO"}),
     ("referrerStats", "{ referrerStats { leads } }", {"ADMIN", "PRO"}),
     (
+        "duplicateInquiryGroups",
+        "{ duplicateInquiryGroups { key } }",
+        {"ADMIN", "PRO"},
+    ),
+    (
         "activities",
         '{ activities(inquiryId: "999999") { id } }',
         {"ADMIN", "PRO"},
@@ -264,6 +269,11 @@ OPERATIONS = [
     (
         "setInquiryReferrer",
         'mutation { setInquiryReferrer(inquiryId: "999999", referrerId: "1") { id } }',
+        {"PRO"},
+    ),
+    (
+        "mergeInquiries",
+        'mutation { mergeInquiries(primaryId: "999999", duplicateId: "888888") { id } }',
         {"PRO"},
     ),
 ]
