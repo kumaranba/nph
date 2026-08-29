@@ -22,7 +22,8 @@ from .phones import normalize_phone
 from .dedup import MergeError, find_duplicate_groups, merge_inquiries
 from .models import (
     Activity, ActivityKind, AdditionalCharge, Admission, AdmissionStatus, Bed,
-    BedStatus, ConsentStatus, Fee, Attendance, AttendanceStatus, FollowUp,
+    BedStatus, ChargeCategory, ConsentStatus, Fee, Attendance, AttendanceStatus,
+    FollowUp,
     FollowUpKind, FoodPreference, FoodRate, Gender, Inquiry, InquirySource,
     InquiryStatus, LostReason, Invoice,
     InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
@@ -2549,6 +2550,8 @@ class Mutation:
         refund_amount: Optional[Decimal] = None,
         discharge_type: Optional[str] = None,
         discharge_notes: Optional[str] = None,
+        medication_amount: Optional[Decimal] = None,
+        medication_note: Optional[str] = None,
     ) -> DischargeResult:
         user = info.context.request.user
 
@@ -2564,6 +2567,23 @@ class Mutation:
         if fees_paid < 0 or charges_paid < 0:
             raise GraphQLError('Payment amounts cannot be negative.')
         account = _resolve_active_account(account_id) if account_id else None
+
+        # Optional post-discharge take-home medication: billed and paid at
+        # discharge, into the Pharmacy account. The charge and its payment are
+        # always created together, so they never affect the outstanding-dues
+        # hard block — leave the amount blank and discharge proceeds as normal.
+        medication_amount = medication_amount or Decimal('0')
+        if medication_amount < 0:
+            raise GraphQLError('Medication amount cannot be negative.')
+        pharmacy_account = None
+        if medication_amount > 0:
+            pharmacy_account = PaymentAccount.objects.filter(
+                name='Pharmacy', is_active=True
+            ).first()
+            if pharmacy_account is None:
+                raise GraphQLError(
+                    'Pharmacy account is not set up. Run migrations to seed it.'
+                )
 
         with transaction.atomic():
             try:
@@ -2582,6 +2602,19 @@ class Mutation:
             if d < admission.admission_date:
                 raise GraphQLError('Discharge date cannot precede the admission date.')
 
+            # Take-home medication: record the drug charge (dated the discharge
+            # day) before the sweep so it lands on the final invoice.
+            if medication_amount > 0:
+                AdditionalCharge.objects.create(
+                    admission=admission,
+                    category=ChargeCategory.DRUGS,
+                    amount=medication_amount,
+                    charge_date=d,
+                    description=(medication_note or '').strip()
+                    or 'Post-discharge medication (1 month)',
+                    recorded_by=user,
+                )
+
             # Bill any unbilled charges (last chance after discharge), then
             # pro-rate the in-progress cycle's fee down to the days stayed.
             BillingService.sweep_unbilled_charges(admission)
@@ -2591,6 +2624,14 @@ class Mutation:
             if fees_paid + charges_paid > 0:
                 BillingService.record_payment_for_admission(
                     admission, fees_paid, charges_paid, d, user, account=account,
+                )
+
+            # Record the medication payment into the Pharmacy account (its own
+            # receipt, so pharmacy money is tracked and shows on the statement).
+            if medication_amount > 0:
+                BillingService.record_payment_for_admission(
+                    admission, Decimal('0'), medication_amount, d, user,
+                    account=pharmacy_account,
                 )
 
             # Hard block: nothing may be left owing.

@@ -63,6 +63,8 @@ export function DischargeModal({
   const [chargesPaid, setChargesPaid] = useState("");
   const [accountId, setAccountId] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
+  const [medicationAmount, setMedicationAmount] = useState("");
+  const [medicationNote, setMedicationNote] = useState("");
   const [prefilled, setPrefilled] = useState(false);
 
   const { data, loading: previewing, error: previewError } = useQuery<Preview>(
@@ -116,6 +118,8 @@ export function DischargeModal({
         chargesPaid: chargesPaid || "0",
         accountId: accountId || null,
         refundAmount: isFinance && refundAmount !== "" ? refundAmount : null,
+        medicationAmount: medicationAmount !== "" ? medicationAmount : null,
+        medicationNote: medicationNote || null,
       },
     });
   }
@@ -338,6 +342,49 @@ export function DischargeModal({
                       </p>
                     </div>
                   ) : null}
+
+                  {/* Take-home medication (optional) */}
+                  <div className="space-y-3 rounded-lg border p-3">
+                    <div>
+                      <p className="text-sm font-medium">
+                        Take-home medication (optional)
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Billed to the patient and paid into the Pharmacy
+                        account. Leave blank if not dispensing.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dc-med">Amount</Label>
+                        <Input
+                          id="dc-med"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="0.01"
+                          placeholder="0.00"
+                          value={medicationAmount}
+                          onChange={(e) => setMedicationAmount(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dc-med-note">Note</Label>
+                        <Input
+                          id="dc-med-note"
+                          placeholder="e.g. 1-month supply"
+                          value={medicationNote}
+                          onChange={(e) => setMedicationNote(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {Number(medicationAmount) > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Collect <b>{rupee(medicationAmount)}</b> for medication,
+                        into the Pharmacy account.
+                      </p>
+                    ) : null}
+                  </div>
 
                   {isFinance ? (
                     <div className="space-y-1.5">
