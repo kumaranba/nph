@@ -659,6 +659,8 @@ export const DISCHARGE_PATIENT = gql`
     $chargesPaid: Decimal
     $accountId: ID
     $refundAmount: Decimal
+    $medicationAmount: Decimal
+    $medicationNote: String
   ) {
     dischargePatient(
       admissionId: $admissionId
@@ -667,6 +669,8 @@ export const DISCHARGE_PATIENT = gql`
       chargesPaid: $chargesPaid
       accountId: $accountId
       refundAmount: $refundAmount
+      medicationAmount: $medicationAmount
+      medicationNote: $medicationNote
     ) {
       refundAmount
       admission {

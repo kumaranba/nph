@@ -46,7 +46,7 @@ def admission(db):
 def test_seeded_accounts_listed_for_finance(finance_client, db):
     result = finance_client.execute(ACCOUNTS)
     names = {a["name"] for a in result["data"]["paymentAccounts"]}
-    assert names == {"Nila", "Vaigari", "Bank AC"}
+    assert names == {"Nila", "Vaigari", "Bank AC", "Pharmacy"}
 
 
 def test_nurse_cannot_list_accounts(nurse_client, db):
