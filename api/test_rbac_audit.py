@@ -220,6 +220,11 @@ OPERATIONS = [
         {"PRO"},
     ),
     (
+        "updateInquiry",
+        'mutation { updateInquiry(inquiryId: "999999", phone: "9") { id } }',
+        {"PRO"},
+    ),
+    (
         "linkInquiryToPatient",
         'mutation { linkInquiryToPatient(inquiryId: "999999", patientId: "1") { id } }',
         {"PRO"},

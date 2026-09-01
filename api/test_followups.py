@@ -196,3 +196,66 @@ def test_admin_cannot_mark_done(admin_client, follow_up):
     assert result["errors"]
     follow_up.refresh_from_db()
     assert follow_up.is_done is False
+
+
+# --- lead (inquiry) follow-ups --------------------------------------------
+
+from api.models import Inquiry, InquiryStatus  # noqa: E402
+
+
+@pytest.fixture
+def lead(db):
+    return Inquiry.objects.create(
+        name="Prospect", phone="9876543210", source="PHONE",
+        status=InquiryStatus.NEW,
+    )
+
+
+def test_pro_creates_follow_up_for_lead(pro_client, lead):
+    result = pro_client.execute(CREATE, {"data": {
+        "inquiryId": str(lead.id),
+        "followUpDate": str(date.today() + timedelta(days=2)),
+        "note": "call back about room",
+    }})
+    assert result.get("errors") is None
+    data = result["data"]["createFollowUp"]
+    assert data["note"] == "call back about room"
+    assert data["patient"] is None
+    fu = FollowUp.objects.get(pk=data["id"])
+    assert fu.inquiry_id == lead.id
+    assert fu.patient_id is None
+
+
+def test_lead_follow_up_shows_in_due_list(pro_client, lead):
+    FollowUp.objects.create(
+        inquiry=lead, follow_up_date=date.today() - timedelta(days=1),
+    )
+    due = pro_client.execute(DUE, {})
+    assert due.get("errors") is None
+    assert len(due["data"]["dueFollowUps"]) == 1
+
+
+def test_follow_up_requires_patient_or_inquiry(pro_client):
+    result = pro_client.execute(CREATE, {"data": {
+        "followUpDate": str(date.today()),
+    }})
+    assert result["errors"]
+    assert FollowUp.objects.count() == 0
+
+
+def test_follow_up_rejects_both_patient_and_inquiry(pro_client, patient, lead):
+    result = pro_client.execute(CREATE, {"data": {
+        "patientId": str(patient.id),
+        "inquiryId": str(lead.id),
+        "followUpDate": str(date.today()),
+    }})
+    assert result["errors"]
+    assert FollowUp.objects.count() == 0
+
+
+def test_follow_up_unknown_inquiry(pro_client):
+    result = pro_client.execute(CREATE, {"data": {
+        "inquiryId": "999999", "followUpDate": str(date.today()),
+    }})
+    assert result["errors"]
+    assert FollowUp.objects.count() == 0

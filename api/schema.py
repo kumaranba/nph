@@ -483,10 +483,12 @@ class AttendanceEntryInput:
 
 @strawberry.input
 class CreateFollowUpInput:
-    """A dated follow-up reminder for a patient. `admission` is optional (the
-    follow-up may outlive a specific admission). Starts not-done."""
-    patient_id: strawberry.ID
+    """A dated follow-up reminder for a patient OR a lead (inquiry). Exactly one
+    of `patient_id` / `inquiry_id` must be given. `admission` is optional and
+    applies to a patient follow-up only. Starts not-done."""
     follow_up_date: date
+    patient_id: Optional[strawberry.ID] = None
+    inquiry_id: Optional[strawberry.ID] = None
     note: Optional[str] = ""
     admission_id: Optional[strawberry.ID] = None
 
@@ -2979,6 +2981,48 @@ class Mutation:
             _schedule_op_nudge(inquiry, data.consulted_on, user)
         return inquiry
 
+    # Edit a lead's core details (name, phone, notes, source). Partial — only
+    # the provided fields change. Stage, consent, assignment, consult date and
+    # referrer have their own dedicated mutations. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def update_inquiry(
+        self,
+        info: Info,
+        inquiry_id: strawberry.ID,
+        name: Optional[str] = strawberry.UNSET,
+        phone: Optional[str] = strawberry.UNSET,
+        notes: Optional[str] = strawberry.UNSET,
+        source: Optional[InquirySourceEnum] = strawberry.UNSET,
+    ) -> InquiryType:
+        try:
+            inquiry = Inquiry.objects.get(pk=inquiry_id)
+        except Inquiry.DoesNotExist:
+            raise GraphQLError('Inquiry not found.')
+        fields = []
+        if name is not strawberry.UNSET:
+            new_name = (name or '').strip()
+            if not new_name:
+                raise GraphQLError('Inquiry name cannot be empty.')
+            inquiry.name = new_name
+            fields.append('name')
+        if phone is not strawberry.UNSET:
+            inquiry.phone = (phone or '').strip()[:20]
+            fields.append('phone')
+        if notes is not strawberry.UNSET:
+            inquiry.notes = (notes or '').strip()
+            fields.append('notes')
+        if source is not strawberry.UNSET and source is not None:
+            inquiry.source = source.value
+            fields.append('source')
+        if fields:
+            inquiry.save(update_fields=fields + ['updated_at'])
+            _log_activity(
+                ActivityKind.SYSTEM, 'Lead details updated',
+                inquiry=inquiry, user=info.context.request.user,
+            )
+        return inquiry
+
     # --- PRM: referral sources (PRO only; ADMIN is view-only) --------------
     # Add a referral source (doctor, hospital, former patient, staff). PRO only.
     @strawberry.mutation
@@ -3295,6 +3339,26 @@ class Mutation:
     def create_follow_up(
         self, info: Info, data: CreateFollowUpInput
     ) -> FollowUpType:
+        if bool(data.patient_id) == bool(data.inquiry_id):
+            raise GraphQLError(
+                'Provide exactly one of patient or inquiry for the follow-up.'
+            )
+
+        # Lead (inquiry) follow-up.
+        if data.inquiry_id is not None:
+            try:
+                inquiry = Inquiry.objects.get(pk=data.inquiry_id)
+            except Inquiry.DoesNotExist:
+                raise GraphQLError('Inquiry not found.')
+            return FollowUp.objects.create(
+                inquiry=inquiry,
+                kind=FollowUpKind.MANUAL,
+                note=(data.note or '').strip(),
+                follow_up_date=data.follow_up_date,
+                created_by=info.context.request.user,
+            )
+
+        # Patient follow-up.
         try:
             patient = Patient.objects.get(pk=data.patient_id)
         except Patient.DoesNotExist:
