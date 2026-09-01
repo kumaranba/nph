@@ -768,6 +768,30 @@ export const CREATE_INQUIRY = gql`
   }
 `;
 
+export const UPDATE_INQUIRY = gql`
+  mutation UpdateInquiry(
+    $id: ID!
+    $name: String
+    $phone: String
+    $notes: String
+    $source: InquirySourceEnum
+  ) {
+    updateInquiry(
+      inquiryId: $id
+      name: $name
+      phone: $phone
+      notes: $notes
+      source: $source
+    ) {
+      id
+      name
+      phone
+      notes
+      source
+    }
+  }
+`;
+
 // Public, unauthenticated: the website enquiry form.
 export const SUBMIT_WEB_ENQUIRY = gql`
   mutation SubmitWebEnquiry($data: WebEnquiryInput!) {

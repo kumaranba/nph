@@ -199,3 +199,68 @@ def test_admin_cannot_update_status(admin_client, inquiry):
     assert result["errors"]
     inquiry.refresh_from_db()
     assert inquiry.status == InquiryStatus.NEW
+
+
+# --- update lead details (name / phone / notes / source) ------------------
+
+UPDATE = """
+mutation($id: ID!, $name: String, $phone: String, $notes: String,
+         $source: InquirySourceEnum) {
+  updateInquiry(inquiryId: $id, name: $name, phone: $phone, notes: $notes,
+                source: $source) {
+    id name phone notes source
+  }
+}
+"""
+
+
+def test_pro_updates_phone_and_name(pro_client, inquiry):
+    result = pro_client.execute(UPDATE, {
+        "id": str(inquiry.id), "name": "  Ramesh K  ", "phone": "  9000000000 ",
+    })
+    assert result.get("errors") is None
+    data = result["data"]["updateInquiry"]
+    assert data["name"] == "Ramesh K"          # trimmed
+    assert data["phone"] == "9000000000"       # trimmed
+    inquiry.refresh_from_db()
+    assert inquiry.name == "Ramesh K"
+    assert inquiry.phone == "9000000000"
+
+
+def test_update_is_partial(pro_client, inquiry):
+    # Only phone provided — name and notes untouched.
+    pro_client.execute(UPDATE, {"id": str(inquiry.id), "phone": "9111111111"})
+    inquiry.refresh_from_db()
+    assert inquiry.phone == "9111111111"
+    assert inquiry.name == "Ramesh"
+    assert inquiry.notes == "asked about single room"
+
+
+def test_update_can_clear_phone(pro_client, inquiry):
+    result = pro_client.execute(UPDATE, {"id": str(inquiry.id), "phone": ""})
+    assert result.get("errors") is None
+    inquiry.refresh_from_db()
+    assert inquiry.phone == ""
+
+
+def test_update_rejects_blank_name(pro_client, inquiry):
+    result = pro_client.execute(UPDATE, {"id": str(inquiry.id), "name": "   "})
+    assert result["errors"]
+    inquiry.refresh_from_db()
+    assert inquiry.name == "Ramesh"
+
+
+def test_update_changes_source(pro_client, inquiry):
+    result = pro_client.execute(UPDATE, {"id": str(inquiry.id), "source": "WHATSAPP"})
+    assert result.get("errors") is None
+    inquiry.refresh_from_db()
+    assert inquiry.source == "WHATSAPP"
+
+
+@pytest.mark.parametrize("client_name", ["admin_client", "finance_client", "nurse_client"])
+def test_update_inquiry_forbidden_for_non_pro(request, client_name, inquiry):
+    client = request.getfixturevalue(client_name)
+    result = client.execute(UPDATE, {"id": str(inquiry.id), "phone": "9"})
+    assert result["errors"]
+    inquiry.refresh_from_db()
+    assert inquiry.phone == "9876543210"

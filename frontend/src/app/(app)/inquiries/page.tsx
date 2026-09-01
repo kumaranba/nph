@@ -27,10 +27,12 @@ import { getAccessToken } from "@/lib/auth";
 import { formatDate } from "@/lib/format-date";
 import {
   ASSIGN_INQUIRY,
+  CREATE_FOLLOW_UP,
   INQUIRIES,
   OP_CONSULT_WORKLIST,
   PRO_USERS,
   SET_CONSULTED,
+  UPDATE_INQUIRY,
   UPDATE_INQUIRY_STATUS,
 } from "@/lib/graphql/operations";
 import { useMe } from "@/lib/me-context";
@@ -111,6 +113,7 @@ export default function InquiriesPage() {
   const [linkTarget, setLinkTarget] = useState<Inquiry | null>(null);
   const [lostTarget, setLostTarget] = useState<Inquiry | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Inquiry | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [histKey, setHistKey] = useState(0);
   const [view, setView] = useState<"inquiries" | "worklist">("inquiries");
 
@@ -138,6 +141,8 @@ export default function InquiriesPage() {
   });
   const [assignInquiry] = useMutation(ASSIGN_INQUIRY, { onError: () => {} });
   const [setConsulted] = useMutation(SET_CONSULTED, { onError: () => {} });
+  const [updateInquiry, { loading: savingProfile, error: profileError }] =
+    useMutation(UPDATE_INQUIRY, { onError: () => {} });
 
   const { data: proData } = useQuery<ProUsers>(PRO_USERS, {
     skip: !hasToken || !allowed,
@@ -295,7 +300,16 @@ export default function InquiriesPage() {
                   {rows.map((r) => (
                     <tr key={r.id} className="border-b last:border-0 align-top">
                       <td className="py-2.5 pr-4">
-                        <span className="font-medium">{r.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProfile(false);
+                            setHistoryTarget(r);
+                          }}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {r.name}
+                        </button>
                         {r.doNotContact ? (
                           <span className="ml-2 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
                             Do not contact
@@ -313,10 +327,13 @@ export default function InquiriesPage() {
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => setHistoryTarget(r)}
+                          onClick={() => {
+                            setEditingProfile(false);
+                            setHistoryTarget(r);
+                          }}
                           className="mt-0.5 text-[11px] font-medium text-primary hover:underline"
                         >
-                          History
+                          Profile
                         </button>
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap">
@@ -469,7 +486,10 @@ export default function InquiriesPage() {
           role="dialog"
           aria-modal="true"
           aria-label="Lead history"
-          onClick={() => setHistoryTarget(null)}
+          onClick={() => {
+            setHistoryTarget(null);
+            setEditingProfile(false);
+          }}
         >
           <div
             className="flex h-full w-full flex-col bg-background shadow-lg sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-lg sm:border"
@@ -478,18 +498,54 @@ export default function InquiriesPage() {
             <div className="flex items-center justify-between border-b px-4 py-3.5">
               <div>
                 <h2 className="text-base font-semibold">{historyTarget.name}</h2>
-                <p className="text-xs text-muted-foreground">Interaction history</p>
+                <p className="text-xs text-muted-foreground">Lead profile</p>
               </div>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setHistoryTarget(null)}
-                className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-1">
+                {canManage && !editingProfile ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingProfile(true)}
+                    className="rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+                  >
+                    Edit
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onClick={() => {
+                    setHistoryTarget(null);
+                    setEditingProfile(false);
+                  }}
+                  className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              {editingProfile ? (
+                <LeadEditForm
+                  key={historyTarget.id}
+                  lead={historyTarget}
+                  saving={savingProfile}
+                  errorMsg={profileError?.message ?? null}
+                  onCancel={() => setEditingProfile(false)}
+                  onSave={async (vals) => {
+                    const res = await updateInquiry({
+                      variables: { id: historyTarget.id, ...vals },
+                    });
+                    const u = res.data?.updateInquiry;
+                    if (u) {
+                      // Reflect the edit immediately (e.g. so the WhatsApp /
+                      // Call buttons appear once a phone is added).
+                      setHistoryTarget({ ...historyTarget, ...u });
+                      setEditingProfile(false);
+                      refetchActive();
+                    }
+                  }}
+                />
+              ) : null}
               <ConsentControl
                 inquiryId={historyTarget.id}
                 consent={historyTarget.contactConsent}
@@ -528,6 +584,9 @@ export default function InquiriesPage() {
                   doNotContact={historyTarget.doNotContact}
                   onLogged={() => setHistKey((k) => k + 1)}
                 />
+              ) : null}
+              {canManage ? (
+                <LeadFollowUpForm inquiryId={historyTarget.id} />
               ) : null}
               <ActivityTimeline
                 inquiryId={historyTarget.id}
@@ -617,6 +676,160 @@ function LostReasonModal({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Inline editor for a lead's core details (name, phone, notes, source). PRO
+// only; opened from the profile panel's Edit button.
+function LeadEditForm({
+  lead,
+  saving,
+  errorMsg,
+  onSave,
+  onCancel,
+}: {
+  lead: Inquiry;
+  saving: boolean;
+  errorMsg: string | null;
+  onSave: (vals: {
+    name: string;
+    phone: string;
+    notes: string;
+    source: string;
+  }) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(lead.name);
+  const [phone, setPhone] = useState(lead.phone ?? "");
+  const [notes, setNotes] = useState(lead.notes ?? "");
+  const [source, setSource] = useState(lead.source);
+
+  const inputCls =
+    "h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <p className="text-sm font-medium">Edit lead</p>
+      <div className="space-y-2.5">
+        <label className="block space-y-1">
+          <span className="text-xs text-muted-foreground">Name</span>
+          <input
+            className={inputCls}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-muted-foreground">Phone</span>
+          <input
+            className={inputCls}
+            type="tel"
+            inputMode="tel"
+            placeholder="e.g. 98765 43210"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-muted-foreground">Source</span>
+          <select
+            className={inputCls}
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+          >
+            {Object.entries(SOURCE_LABEL).map(([val, label]) => (
+              <option key={val} value={val}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-muted-foreground">Notes</span>
+          <textarea
+            className="min-h-[64px] w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+      </div>
+      {errorMsg ? <p className="text-xs text-red-600">{errorMsg}</p> : null}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={saving || !name.trim()}
+          onClick={() =>
+            onSave({ name: name.trim(), phone: phone.trim(), notes, source })
+          }
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Schedule a dated follow-up on a lead (inquiry). It then surfaces in the
+// Follow-ups list and the due bell like any other. PRO only.
+function LeadFollowUpForm({ inquiryId }: { inquiryId: string }) {
+  const [date, setDate] = useState("");
+  const [note, setNote] = useState("");
+  const [added, setAdded] = useState(false);
+
+  const [create, { loading, error }] = useMutation(CREATE_FOLLOW_UP, {
+    onCompleted: () => {
+      setDate("");
+      setNote("");
+      setAdded(true);
+      setTimeout(() => setAdded(false), 2500);
+    },
+    onError: () => {},
+  });
+
+  const inputCls =
+    "h-9 rounded-md border border-input bg-background px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <p className="text-sm font-medium">Add follow-up</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="date"
+          className={inputCls}
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="Note (optional)"
+          className={`${inputCls} min-w-[8rem] flex-1`}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <Button
+          size="sm"
+          disabled={loading || !date}
+          onClick={() =>
+            create({
+              variables: {
+                data: { inquiryId, followUpDate: date, note },
+              },
+            })
+          }
+        >
+          {loading ? "Adding…" : "Add"}
+        </Button>
+      </div>
+      {error ? <p className="text-xs text-red-600">{error.message}</p> : null}
+      {added ? (
+        <p className="text-xs text-green-700">
+          Follow-up scheduled — it&apos;s now on the Follow-ups list.
+        </p>
+      ) : null}
     </div>
   );
 }
