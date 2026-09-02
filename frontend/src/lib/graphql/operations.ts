@@ -565,10 +565,30 @@ export const PAYMENT_ACCOUNTS = gql`
 
 // A patient's account ledger (invoices vs payments) over an optional range.
 export const ACCOUNT_STATEMENT = gql`
-  query AccountStatement($pid: ID!, $from: Date, $to: Date) {
-    accountStatement(patientId: $pid, dateFrom: $from, dateTo: $to) {
+  query AccountStatement(
+    $pid: ID!
+    $from: Date
+    $to: Date
+    $admissionId: ID
+    $allAdmissions: Boolean
+  ) {
+    accountStatement(
+      patientId: $pid
+      dateFrom: $from
+      dateTo: $to
+      admissionId: $admissionId
+      allAdmissions: $allAdmissions
+    ) {
       patientName
       patientCode
+      admissionId
+      scopeLabel
+      availableAdmissions {
+        id
+        admissionDate
+        dischargeDate
+        isCurrent
+      }
       openingBalance
       closingBalance
       totalDebits

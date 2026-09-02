@@ -26,15 +26,31 @@ type Line = {
   credit: string;
   balance: string;
 };
+type AdmissionPeriod = {
+  id: string;
+  admissionDate: string;
+  dischargeDate: string | null;
+  isCurrent: boolean;
+};
 type Statement = {
   patientName: string;
   patientCode: string;
+  admissionId: string | null;
+  scopeLabel: string;
+  availableAdmissions: AdmissionPeriod[];
   openingBalance: string;
   closingBalance: string;
   totalDebits: string;
   totalCredits: string;
   lines: Line[];
 };
+
+const ALL_SCOPE = "__all__";
+
+function periodLabel(a: AdmissionPeriod, fmt: (d: string) => string): string {
+  if (a.isCurrent) return `Current admission · ${fmt(a.admissionDate)} – present`;
+  return `${fmt(a.admissionDate)} → ${a.dischargeDate ? fmt(a.dischargeDate) : "—"}`;
+}
 type StatementResult = { accountStatement: Statement };
 type MeResult = { me: { role: string } };
 
@@ -55,6 +71,8 @@ export default function AccountStatementPage() {
   const params = useParams<{ id: string }>();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // Scope: null = backend default (current admission); an admission id; or ALL_SCOPE.
+  const [scope, setScope] = useState<string | null>(null);
 
   const hasToken = getAccessToken() !== null;
   useEffect(() => {
@@ -66,14 +84,26 @@ export default function AccountStatementPage() {
   });
   const allowed = meData?.me.role === "ADMIN" || meData?.me.role === "FINANCE";
 
+  const scopedAdmissionId = scope && scope !== ALL_SCOPE ? scope : null;
+  const allAdmissions = scope === ALL_SCOPE;
+
   const { data, loading, error, refetch } = useQuery<StatementResult>(
     ACCOUNT_STATEMENT,
     {
-      variables: { pid: params.id, from: from || null, to: to || null },
+      variables: {
+        pid: params.id,
+        from: from || null,
+        to: to || null,
+        admissionId: scopedAdmissionId,
+        allAdmissions,
+      },
       skip: !hasToken || !allowed,
     }
   );
   const s = data?.accountStatement;
+  // The select reflects the current default until the user picks something.
+  const selectValue = scope ?? s?.admissionId ?? "";
+  const showScopePicker = (s?.availableAdmissions.length ?? 0) >= 2;
 
   async function downloadPdf() {
     const token = getAccessToken();
@@ -81,6 +111,8 @@ export default function AccountStatementPage() {
     const qs = new URLSearchParams();
     if (from) qs.set("from", from);
     if (to) qs.set("to", to);
+    if (allAdmissions) qs.set("all", "1");
+    else if (scopedAdmissionId) qs.set("admission", scopedAdmissionId);
     const url = `${STATEMENT_BASE}${params.id}.pdf${qs.toString() ? `?${qs}` : ""}`;
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -144,6 +176,24 @@ export default function AccountStatementPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
+            {showScopePicker ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="scope">Period</Label>
+                <select
+                  id="scope"
+                  className="h-10 w-72 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={selectValue}
+                  onChange={(e) => setScope(e.target.value)}
+                >
+                  {s?.availableAdmissions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {periodLabel(a, formatDate)}
+                    </option>
+                  ))}
+                  <option value={ALL_SCOPE}>Full history (all admissions)</option>
+                </select>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="from">From</Label>
               <Input
@@ -165,6 +215,15 @@ export default function AccountStatementPage() {
               />
             </div>
           </div>
+
+          {s ? (
+            <p className="text-xs text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{s.scopeLabel}</span>
+              {s.availableAdmissions.length >= 2 && scope !== ALL_SCOPE
+                ? " · earlier stays are in the Period dropdown"
+                : ""}
+            </p>
+          ) : null}
 
           {loading ? (
             <TableSkeleton rows={5} cols={5} />
