@@ -235,16 +235,19 @@ def account_statement_pdf(buffer, statement):
         title=f"Account Statement — {statement.patient_code}",
     )
 
-    span = "all dates"
+    # Scope (which admission, or full history) — the primary framing so a shared
+    # PDF is unambiguous. A date range, when set, narrows within that scope.
+    scope = getattr(statement, "scope_label", "") or "All admissions"
     if statement.date_from or statement.date_to:
         span = (f"{_fmt_date(statement.date_from) if statement.date_from else '…'}"
                 f" to {_fmt_date(statement.date_to) if statement.date_to else '…'}")
+        scope = f"{scope}  |  {span}"
 
     story = [
         Paragraph("Nila Psychiatric Hospital", styles["title"]),
         Paragraph(
             f"Account Statement  |  {statement.patient_name} "
-            f"({statement.patient_code})  |  {span}",
+            f"({statement.patient_code})  |  {scope}",
             styles["sub"],
         ),
     ]

@@ -114,6 +114,8 @@ def account_statement_pdf_view(request, patient_id):
         patient_id,
         _parse_date(request.GET.get("from")),
         _parse_date(request.GET.get("to")),
+        admission_id=request.GET.get("admission") or None,
+        all_admissions=request.GET.get("all") == "1",
     )
     buffer = io.BytesIO()
     account_statement_pdf(buffer, statement)

@@ -907,15 +907,34 @@ class StatementLine:
 
 
 @strawberry.type
+class StatementAdmissionPeriod:
+    """One selectable admission period for the statement scope dropdown."""
+    id: strawberry.ID
+    admission_date: date
+    discharge_date: Optional[date]
+    is_current: bool
+
+
+@strawberry.type
 class AccountStatement:
     """A patient's account ledger over a date range. Balance is cash-based:
     invoices billed (debits) minus payments received (credits). A negative
-    balance means the account is in advance credit."""
+    balance means the account is in advance credit.
+
+    Scoped to a single admission by default (the current one, else the most
+    recent) so a shared PDF isn't cluttered by settled earlier stays;
+    ``all_admissions`` widens it to the full lifetime ledger."""
     patient_id: strawberry.ID
     patient_name: str
     patient_code: str
     date_from: Optional[date]
     date_to: Optional[date]
+    # The admission this statement is scoped to (null for full history).
+    admission_id: Optional[strawberry.ID]
+    # Human-readable scope for the on-screen caption and the PDF header.
+    scope_label: str
+    # Every admission period, current-first, for the scope dropdown.
+    available_admissions: List['StatementAdmissionPeriod']
     opening_balance: Decimal
     closing_balance: Decimal
     total_debits: Decimal
@@ -923,18 +942,69 @@ class AccountStatement:
     lines: List[StatementLine]
 
 
+def _statement_scope_label(scoped, all_admissions):
+    """Human-readable scope for the caption / PDF header."""
+    if all_admissions:
+        return 'Full history'
+    if scoped is None:
+        return 'No admissions'
+    doa = scoped.admission_date.strftime('%d-%m-%Y')
+    if scoped.status == AdmissionStatus.ACTIVE or scoped.discharge_date is None:
+        return f'Admission {doa} – present'
+    return f'{doa} → {scoped.discharge_date.strftime("%d-%m-%Y")}'
+
+
 def build_account_statement(
-    patient_id, date_from: date = None, date_to: date = None
+    patient_id, date_from: date = None, date_to: date = None,
+    admission_id=None, all_admissions: bool = False,
 ) -> AccountStatement:
-    """Build a patient's account statement across all their admissions.
+    """Build a patient's account statement.
+
+    Scoped to one admission by default — the current (active) one, else the most
+    recent — so a shared statement isn't cluttered by settled earlier stays.
+    Pass ``admission_id`` to scope to a specific stay, or ``all_admissions`` for
+    the full lifetime ledger. ``date_from`` / ``date_to`` bound the range within
+    the chosen scope.
 
     Debits are invoices (by billing period start; total_due already includes
     that period's additional charges). Credits are payments received (by
     paid_on). Shared by the ``accountStatement`` query and the statement PDF.
     """
     patient = Patient.objects.get(pk=patient_id)
+
+    # Admission periods, current-first then most-recently-discharged, for the
+    # scope dropdown.
+    all_adm = list(patient.admissions.all())
+    active = [a for a in all_adm if a.status == AdmissionStatus.ACTIVE]
+    past = sorted(
+        (a for a in all_adm if a.status != AdmissionStatus.ACTIVE),
+        key=lambda a: (a.discharge_date or a.admission_date), reverse=True,
+    )
+    ordered = active + past
+    available = [
+        StatementAdmissionPeriod(
+            id=a.id, admission_date=a.admission_date,
+            discharge_date=a.discharge_date,
+            is_current=(a.status == AdmissionStatus.ACTIVE),
+        )
+        for a in ordered
+    ]
+
+    # Resolve the scope. Default (no flag / id) is the current-or-latest stay.
+    scoped = None
+    if not all_admissions:
+        if admission_id is not None:
+            scoped = next(
+                (a for a in all_adm if str(a.id) == str(admission_id)), None
+            )
+        if scoped is None:
+            scoped = ordered[0] if ordered else None
+
     invoices = Invoice.objects.filter(admission__patient=patient)
     receipts = PaymentReceipt.objects.filter(admission__patient=patient)
+    if scoped is not None:
+        invoices = invoices.filter(admission=scoped)
+        receipts = receipts.filter(admission=scoped)
 
     # Opening balance = everything billed less received strictly before the
     # range start.
@@ -1006,6 +1076,9 @@ def build_account_statement(
         patient_code=patient.patient_id,
         date_from=date_from,
         date_to=date_to,
+        admission_id=(scoped.id if scoped is not None else None),
+        scope_label=_statement_scope_label(scoped, all_admissions),
+        available_admissions=available,
         opening_balance=opening,
         closing_balance=balance,
         total_debits=total_debits,
@@ -1392,9 +1465,14 @@ class Query:
         patient_id: strawberry.ID,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        admission_id: Optional[strawberry.ID] = None,
+        all_admissions: bool = False,
     ) -> AccountStatement:
         try:
-            return build_account_statement(patient_id, date_from, date_to)
+            return build_account_statement(
+                patient_id, date_from, date_to,
+                admission_id=admission_id, all_admissions=all_admissions,
+            )
         except Patient.DoesNotExist:
             raise GraphQLError('Patient not found.')
 

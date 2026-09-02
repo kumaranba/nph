@@ -138,3 +138,97 @@ def test_statement_pdf_download(ledger, role):
     assert resp.status_code == 200
     assert resp["Content-Type"] == "application/pdf"
     assert resp.content[:5] == b"%PDF-"
+
+
+# --- admission-scoped statements (re-admitted patients) -------------------
+
+from api.schema import build_account_statement  # noqa: E402
+
+
+@pytest.fixture
+def multi_ledger(db):
+    patient = Patient.objects.create(name="Ravi", diagnosis="d", admitting_doctor="Dr")
+    user = User.objects.create_user(
+        email="f2@nph.test", password="secret123", role=UserRole.FINANCE
+    )
+    nila = PaymentAccount.objects.get(name="Nila")
+
+    # Past, discharged admission — one cycle, settled (net zero).
+    past = Admission.objects.create(
+        patient=patient, admission_date=date(2025, 6, 3),
+        monthly_fee=Decimal("5000"), status=AdmissionStatus.ACTIVE,
+    )
+    BillingService.generate_invoice_for_admission(past.id, as_of=date(2025, 6, 3))
+    BillingService.record_payment_for_admission(
+        past, Decimal("5000"), Decimal("0"), date(2025, 6, 20), user, account=nila
+    )
+    past.status = AdmissionStatus.DISCHARGED
+    past.discharge_date = date(2025, 6, 26)
+    past.save()
+
+    # Current, active admission — three cycles, partly paid.
+    cur = Admission.objects.create(
+        patient=patient, admission_date=date(2026, 1, 15),
+        monthly_fee=Decimal("10000"), status=AdmissionStatus.ACTIVE,
+    )
+    for as_of in (date(2026, 1, 15), date(2026, 2, 15), date(2026, 3, 15)):
+        BillingService.generate_invoice_for_admission(cur.id, as_of=as_of)
+    BillingService.record_payment_for_admission(
+        cur, Decimal("15000"), Decimal("0"), date(2026, 2, 20), user, account=nila
+    )
+    return patient, past, cur
+
+
+def test_default_scopes_to_current_admission(multi_ledger):
+    patient, past, cur = multi_ledger
+    st = build_account_statement(patient.id)
+    assert str(st.admission_id) == str(cur.id)
+    assert st.total_debits == Decimal("30000")     # current only, not 35000
+    assert st.total_credits == Decimal("15000")
+    assert st.scope_label.startswith("Admission")
+    assert len(st.available_admissions) == 2
+    assert st.available_admissions[0].is_current is True    # current first
+
+
+def test_scope_to_a_past_admission(multi_ledger):
+    patient, past, cur = multi_ledger
+    st = build_account_statement(patient.id, admission_id=past.id)
+    assert str(st.admission_id) == str(past.id)
+    assert st.total_debits == Decimal("5000")
+    assert st.total_credits == Decimal("5000")
+    assert "→" in st.scope_label                    # date-range label
+
+
+def test_all_admissions_is_full_ledger(multi_ledger):
+    patient, past, cur = multi_ledger
+    st = build_account_statement(patient.id, all_admissions=True)
+    assert st.admission_id is None
+    assert st.scope_label == "Full history"
+    assert st.total_debits == Decimal("35000")      # both stays
+    assert st.total_credits == Decimal("20000")
+
+
+def test_single_admission_lists_one_period(ledger):
+    patient, adm = ledger
+    st = build_account_statement(patient.id)
+    assert len(st.available_admissions) == 1        # frontend hides the picker
+    assert str(st.admission_id) == str(adm.id)
+
+
+SCOPED = """
+query($pid: ID!, $all: Boolean) {
+  accountStatement(patientId: $pid, allAdmissions: $all) {
+    scopeLabel totalDebits availableAdmissions { id isCurrent }
+  }
+}
+"""
+
+
+def test_graphql_all_admissions_scope(finance_client, multi_ledger):
+    patient, past, cur = multi_ledger
+    data = finance_client.execute(
+        SCOPED, {"pid": str(patient.id), "all": True}
+    )["data"]["accountStatement"]
+    assert data["scopeLabel"] == "Full history"
+    assert Decimal(data["totalDebits"]) == Decimal("35000")
+    assert len(data["availableAdmissions"]) == 2
