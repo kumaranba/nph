@@ -160,6 +160,23 @@ class AdmissionType:
     def active_fee(self) -> Optional['FeeType']:
         return self.fees.filter(is_active=True).first()
 
+    # The fee in force for this admission: the active fee while admitted, or the
+    # last fee that was active at discharge (fees are never deleted, so it's the
+    # newest row). None only if the admission never had a fee.
+    @strawberry.field
+    def effective_fee(self) -> Optional['FeeType']:
+        active = self.fees.filter(is_active=True).first()
+        if active is not None:
+            return active
+        return self.fees.order_by('-effective_from', '-created_at').first()
+
+    # Total still owed on this admission across its unpaid/partial invoices.
+    # A discharged admission reads 0 (discharge clears all dues).
+    @strawberry.field
+    def outstanding_due(self) -> Decimal:
+        from .billing import BillingService
+        return BillingService.total_pending_dues(self)
+
     # Default effective date for a fee change (next not-yet-invoiced cycle).
     @strawberry.field
     def next_fee_cycle_date(self) -> date:

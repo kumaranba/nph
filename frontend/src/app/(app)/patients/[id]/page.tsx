@@ -35,6 +35,10 @@ type Admission = {
   id: string;
   status: string;
   admissionDate: string;
+  dischargeDate: string | null;
+  dischargeType: string;
+  effectiveFee: { amount: string } | null;
+  outstandingDue: string;
   openingBalance: string;
   openingBalanceDue: string;
   hasOutstandingDues: boolean;
@@ -216,6 +220,8 @@ export default function PatientProfilePage() {
                   />
                 ) : null}
               </dl>
+
+              <AdmissionHistory admissions={patient.admissions} />
 
               <PatientTagsPanel
                 patientId={patient.id}
@@ -399,6 +405,114 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-4">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="text-right">{value}</dd>
+    </div>
+  );
+}
+
+const rupee = (n: string | number) =>
+  `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+// Inclusive day count between two ISO dates (admission day through the end day).
+function stayDays(fromISO: string, toISO: string): number {
+  const ms =
+    new Date(toISO + "T00:00:00").getTime() -
+    new Date(fromISO + "T00:00:00").getTime();
+  return Math.max(1, Math.floor(ms / 86_400_000) + 1);
+}
+
+// Collapsible admission-history grid: one row per stay, current first then past
+// by discharge date. Columns: DOA, DOD, fee, duration, pending dues.
+function AdmissionHistory({ admissions }: { admissions: Admission[] }) {
+  const [open, setOpen] = useState(true);
+  if (admissions.length === 0) return null;
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const ordered = [...admissions].sort((a, b) => {
+    const aActive = a.status === "ACTIVE";
+    const bActive = b.status === "ACTIVE";
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return (b.dischargeDate ?? b.admissionDate).localeCompare(
+      a.dischargeDate ?? a.admissionDate
+    );
+  });
+
+  return (
+    <div className="rounded-lg border">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2.5 text-sm font-medium"
+      >
+        <span className="flex items-center gap-2">
+          Admission
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
+            {admissions.length}
+          </span>
+        </span>
+        <span className="text-muted-foreground">{open ? "▾" : "▸"}</span>
+      </button>
+
+      {open ? (
+        <div className="overflow-x-auto border-t">
+          <table className="w-full min-w-[440px] text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted-foreground">
+                <th className="px-3 py-2 font-medium">DOA</th>
+                <th className="px-3 py-2 font-medium">DOD</th>
+                <th className="px-3 py-2 text-right font-medium">Fees</th>
+                <th className="px-3 py-2 text-right font-medium">Duration</th>
+                <th className="px-3 py-2 text-right font-medium">Pending dues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordered.map((a) => {
+                const active = a.status === "ACTIVE";
+                const endISO = a.dischargeDate ?? todayISO;
+                const due = Number(a.outstandingDue || 0);
+                return (
+                  <tr
+                    key={a.id}
+                    className={`border-t ${active ? "bg-green-50/60" : ""}`}
+                  >
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      {formatDate(a.admissionDate)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      {active ? (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                          In-patient
+                        </span>
+                      ) : a.dischargeDate ? (
+                        formatDate(a.dischargeDate)
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-medium">
+                      {a.effectiveFee ? rupee(a.effectiveFee.amount) : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right text-muted-foreground">
+                      {stayDays(a.admissionDate, endISO)} days
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                      {due > 0 ? (
+                        <span className="font-medium text-amber-600">
+                          {rupee(due)}
+                        </span>
+                      ) : active ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span className="text-muted-foreground">Cleared</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }

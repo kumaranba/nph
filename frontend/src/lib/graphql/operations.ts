@@ -217,6 +217,8 @@ export const PATIENT = gql`
         id
         status
         admissionDate
+        dischargeDate
+        dischargeType
         monthlyFee
         creditBalance
         openingBalance
@@ -227,6 +229,12 @@ export const PATIENT = gql`
           amount
           effectiveFrom
         }
+        effectiveFee {
+          id
+          amount
+          effectiveFrom
+        }
+        outstandingDue
         hasOutstandingDues
         outstandingInvoiceCount
         bed {
