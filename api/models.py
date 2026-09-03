@@ -336,6 +336,10 @@ class Invoice(models.Model):
     billing_period_end = models.DateField()
     base_fee = models.DecimalField(max_digits=10, decimal_places=2)
     refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Administrative concession written off against this invoice (non-cash).
+    # Reduces balance_due and counts toward "settled", like a payment, but is
+    # never treated as money received. See the Waiver model for the audit trail.
+    waived_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_due = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(
         max_length=10, choices=InvoiceStatus.choices, default=InvoiceStatus.UNPAID
@@ -435,6 +439,30 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'Payment #{self.pk} — ₹{self.amount} on {self.paid_on}'
+
+
+class Waiver(models.Model):
+    """An administrative concession — part or all of an admission's outstanding
+    balance written off (e.g. at discharge, case by case). It is applied by
+    stamping ``waived_amount`` on the admission's invoices (which clears the dues
+    everywhere), while this row records who authorized it, how much, and why.
+    Not money received: excluded from cash / collection reports."""
+    admission = models.ForeignKey(
+        Admission, on_delete=models.PROTECT, related_name='waivers'
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.TextField()
+    recorded_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='recorded_waivers',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f'Waiver #{self.pk} — ₹{self.amount} on Admission #{self.admission_id}'
 
 
 # ---------------------------------------------------------------------------

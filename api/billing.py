@@ -254,8 +254,13 @@ class BillingService:
 
     @classmethod
     def recompute_status(cls, invoice: Invoice) -> Invoice:
-        """Recompute and persist an invoice's status from payments + refunds."""
-        settled = cls.amount_paid(invoice) + (invoice.refund_amount or Decimal("0"))
+        """Recompute and persist an invoice's status from payments, refunds, and
+        any administrative waiver."""
+        settled = (
+            cls.amount_paid(invoice)
+            + (invoice.refund_amount or Decimal("0"))
+            + (invoice.waived_amount or Decimal("0"))
+        )
         if settled <= 0:
             invoice.status = InvoiceStatus.UNPAID
         elif settled < invoice.total_due:
@@ -270,6 +275,7 @@ class BillingService:
         return (
             invoice.total_due
             - (invoice.refund_amount or Decimal("0"))
+            - (invoice.waived_amount or Decimal("0"))
             - cls.amount_paid(invoice)
         )
 
@@ -422,6 +428,46 @@ class BillingService:
         ).prefetch_related("payments"):
             total += cls.balance_due(inv)
         return total
+
+    @classmethod
+    @transaction.atomic
+    def apply_waiver(cls, admission, amount, reason, user):
+        """Write off up to ``amount`` of the admission's outstanding balance as a
+        non-cash concession, allocating oldest-first across unpaid/partial
+        invoices (stamping ``waived_amount``). Never waives more than is owed.
+        Records a Waiver audit row for the amount actually applied and returns
+        it. Amounts <= 0 are a no-op returning 0.
+        """
+        from .models import Waiver
+
+        amount = Decimal(amount)
+        if amount <= 0:
+            return Decimal("0")
+
+        remaining = amount
+        applied = Decimal("0")
+        outstanding = admission.invoices.filter(
+            status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+        ).order_by("billing_period_start")
+        for invoice in outstanding:
+            if remaining <= 0:
+                break
+            due = cls.balance_due(invoice)
+            if due <= 0:
+                continue
+            take = min(remaining, due)
+            invoice.waived_amount = (invoice.waived_amount or Decimal("0")) + take
+            invoice.save(update_fields=["waived_amount"])
+            cls.recompute_status(invoice)
+            remaining -= take
+            applied += take
+
+        if applied > 0:
+            Waiver.objects.create(
+                admission=admission, amount=applied,
+                reason=(reason or "").strip(), recorded_by=user,
+            )
+        return applied
 
     @classmethod
     def current_cycle_charge(cls, admission, as_of: date = None) -> Decimal:

@@ -29,7 +29,7 @@ from .models import (
     InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
     Referrer, ReferrerKind, Room,
     Staff, StaffDesignation, StaffMealRate, SystemSetting, Tag, TagCategory,
-    User, UserRole, VitalReading, VitalsThreshold,
+    User, UserRole, VitalReading, VitalsThreshold, Waiver,
 )
 from .permissions import login_required, require_roles
 from .types import (
@@ -288,6 +288,8 @@ class DischargeResult:
     has_outstanding_dues: bool
     outstanding_invoice_count: int
     refund_amount: Decimal
+    # Administrative concession written off at discharge (0 if none).
+    waived_amount: Decimal = Decimal('0')
 
 
 @strawberry.type
@@ -1018,6 +1020,13 @@ def build_account_statement(
             (r.amount for r in receipts.filter(paid_on__lt=date_from)),
             Decimal('0'),
         )
+        _pre_waivers = Waiver.objects.filter(admission__patient=patient)
+        if scoped is not None:
+            _pre_waivers = _pre_waivers.filter(admission=scoped)
+        opening -= sum(
+            (w.amount for w in _pre_waivers if w.created_at.date() < date_from),
+            Decimal('0'),
+        )
 
     inv_q = invoices
     rcpt_q = receipts
@@ -1056,6 +1065,18 @@ def build_account_statement(
     for r in rcpt_q:
         acct = f" ({r.account.name})" if r.account else ''
         events.append((r.paid_on, 1, f"Payment{acct}", Decimal('0'), r.amount))
+    # Waivers (administrative concessions) are non-cash credits — they reduce the
+    # balance but are never counted as money received in cash reports.
+    waiver_q = Waiver.objects.filter(admission__patient=patient)
+    if scoped is not None:
+        waiver_q = waiver_q.filter(admission=scoped)
+    for w in waiver_q:
+        wd = w.created_at.date()
+        if date_from is not None and wd < date_from:
+            continue
+        if date_to is not None and wd > date_to:
+            continue
+        events.append((wd, 1, 'Waiver (concession)', Decimal('0'), w.amount))
     events.sort(key=lambda e: (e[0], e[1]))
 
     balance = opening
@@ -2632,6 +2653,8 @@ class Mutation:
         discharge_notes: Optional[str] = None,
         medication_amount: Optional[Decimal] = None,
         medication_note: Optional[str] = None,
+        waiver_amount: Optional[Decimal] = None,
+        waiver_reason: Optional[str] = None,
     ) -> DischargeResult:
         user = info.context.request.user
 
@@ -2641,6 +2664,15 @@ class Mutation:
                 raise GraphQLError('Only Finance can record a refund on discharge.')
             if refund_amount < 0:
                 raise GraphQLError('Refund amount cannot be negative.')
+
+        # A waiver (administrative concession) may be recorded by Admin or
+        # Finance and always needs a reason. It writes off outstanding dues
+        # (non-cash), so a full waiver lets discharge proceed with no payment.
+        waiver_amount = waiver_amount or Decimal('0')
+        if waiver_amount < 0:
+            raise GraphQLError('Waiver amount cannot be negative.')
+        if waiver_amount > 0 and not (waiver_reason or '').strip():
+            raise GraphQLError('A reason is required to waive a balance.')
 
         fees_paid = fees_paid or Decimal('0')
         charges_paid = charges_paid or Decimal('0')
@@ -2700,18 +2732,26 @@ class Mutation:
             BillingService.sweep_unbilled_charges(admission)
             BillingService.apply_discharge_proration(admission, d)
 
-            # Record the settling payment, if any (allocates oldest-first).
-            if fees_paid + charges_paid > 0:
-                BillingService.record_payment_for_admission(
-                    admission, fees_paid, charges_paid, d, user, account=account,
-                )
-
-            # Record the medication payment into the Pharmacy account (its own
-            # receipt, so pharmacy money is tracked and shows on the statement).
+            # Record the medication payment first into the Pharmacy account (its
+            # own receipt) — so the drug charge is settled and never waived.
             if medication_amount > 0:
                 BillingService.record_payment_for_admission(
                     admission, Decimal('0'), medication_amount, d, user,
                     account=pharmacy_account,
+                )
+
+            # Administrative waiver: write off part/all of the remaining dues
+            # (non-cash, capped at what's owed, audited via a Waiver row).
+            waived = Decimal('0')
+            if waiver_amount > 0:
+                waived = BillingService.apply_waiver(
+                    admission, waiver_amount, waiver_reason, user
+                )
+
+            # Record the settling payment for whatever remains (oldest-first).
+            if fees_paid + charges_paid > 0:
+                BillingService.record_payment_for_admission(
+                    admission, fees_paid, charges_paid, d, user, account=account,
                 )
 
             # Hard block: nothing may be left owing.
@@ -2751,6 +2791,7 @@ class Mutation:
             has_outstanding_dues=False,
             outstanding_invoice_count=0,
             refund_amount=admission.refund_amount,
+            waived_amount=waived,
         )
 
     # Update editable app settings. Any field left null is unchanged; only the

@@ -65,6 +65,8 @@ export function DischargeModal({
   const [refundAmount, setRefundAmount] = useState("");
   const [medicationAmount, setMedicationAmount] = useState("");
   const [medicationNote, setMedicationNote] = useState("");
+  const [waiverAmount, setWaiverAmount] = useState("");
+  const [waiverReason, setWaiverReason] = useState("");
   const [prefilled, setPrefilled] = useState(false);
 
   const { data, loading: previewing, error: previewError } = useQuery<Preview>(
@@ -102,10 +104,16 @@ export function DischargeModal({
   const pv = data?.dischargePreview;
   const isDone = Boolean(done?.dischargePatient);
   const totalDue = pv ? Number(pv.totalDueNow) : 0;
+  const waiver = Math.max(0, Number(waiverAmount) || 0);
   const paying = (Number(feesPaid) || 0) + (Number(chargesPaid) || 0);
-  const shortfall = Math.round((totalDue - paying) * 100) / 100;
-  const tallied = pv != null && shortfall <= 0.005;
-  const payPct = totalDue > 0 ? Math.min(100, (paying / totalDue) * 100) : 100;
+  // A waiver settles dues without cash, so it counts toward clearing the balance.
+  const shortfall = Math.round((totalDue - paying - waiver) * 100) / 100;
+  const waiverNeedsReason = waiver > 0 && !waiverReason.trim();
+  const tallied = pv != null && shortfall <= 0.005 && !waiverNeedsReason;
+  const payPct =
+    totalDue > 0
+      ? Math.min(100, ((paying + waiver) / totalDue) * 100)
+      : 100;
   const stayPct =
     pv && pv.daysInPeriod > 0 ? (pv.daysStayed / pv.daysInPeriod) * 100 : 0;
 
@@ -120,6 +128,8 @@ export function DischargeModal({
         refundAmount: isFinance && refundAmount !== "" ? refundAmount : null,
         medicationAmount: medicationAmount !== "" ? medicationAmount : null,
         medicationNote: medicationNote || null,
+        waiverAmount: waiver > 0 ? String(waiver) : null,
+        waiverReason: waiver > 0 ? waiverReason.trim() : null,
       },
     });
   }
@@ -323,6 +333,47 @@ export function DischargeModal({
                           </select>
                         </div>
                       ) : null}
+
+                      {/* Waiver / concession (Admin + Finance) */}
+                      <div className="space-y-2 rounded-md border border-dashed p-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Waiver / concession
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dc-waiver">Amount</Label>
+                            <Input
+                              id="dc-waiver"
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="0.01"
+                              placeholder="0.00"
+                              value={waiverAmount}
+                              onChange={(e) => setWaiverAmount(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="dc-waiver-reason">Reason</Label>
+                            <Input
+                              id="dc-waiver-reason"
+                              placeholder="e.g. financial hardship"
+                              value={waiverReason}
+                              onChange={(e) => setWaiverReason(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        {waiverNeedsReason ? (
+                          <p className="text-xs text-red-600">
+                            Enter a reason to waive a balance.
+                          </p>
+                        ) : waiver > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {rupee(waiver)} will be written off (not collected).
+                          </p>
+                        ) : null}
+                      </div>
+
                       <div className="h-2 overflow-hidden rounded-full border bg-muted">
                         <div
                           className={
@@ -337,8 +388,10 @@ export function DischargeModal({
                         }`}
                       >
                         {tallied
-                          ? `Account tallied — ${rupee(paying)} settles the balance.`
-                          : `${rupee(shortfall)} still owed — collect the balance to unlock discharge.`}
+                          ? waiver > 0
+                            ? `Account tallied — ${rupee(paying)} collected, ${rupee(waiver)} waived.`
+                            : `Account tallied — ${rupee(paying)} settles the balance.`
+                          : `${rupee(shortfall)} still owed — collect or waive the balance to unlock discharge.`}
                       </p>
                     </div>
                   ) : null}
