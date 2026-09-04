@@ -84,6 +84,29 @@ class Bed(models.Model):
     def __str__(self):
         return f'{self.room.name} — {self.label}'
 
+    @staticmethod
+    def next_label(room):
+        """The next auto-incremented bed label for ``room``: the highest existing
+        numeric suffix plus one, keeping that bed's alphabetic prefix (e.g. after
+        B24 → B25). Starts at B1 for an empty room; guaranteed unique in the room.
+        """
+        import re
+
+        prefix, highest, found = 'B', 0, False
+        for bed in room.beds.all():
+            match = re.match(r'^\s*([A-Za-z]*)\s*(\d+)\s*$', bed.label or '')
+            if match and (not found or int(match.group(2)) > highest):
+                found = True
+                highest = int(match.group(2))
+                prefix = match.group(1) or 'B'
+
+        n = highest
+        label = f'{prefix}{n + 1}'
+        while room.beds.filter(label=label).exists():
+            n += 1
+            label = f'{prefix}{n + 1}'
+        return label
+
 
 # ---------------------------------------------------------------------------
 # Patient

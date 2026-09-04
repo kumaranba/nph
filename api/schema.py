@@ -2467,6 +2467,27 @@ class Mutation:
 
         return admission
 
+    # Add a bed to a room, auto-labelling it as the next in sequence (e.g. after
+    # B24 → B25). Used from the admission form when a room has no vacant bed.
+    # ADMIN only. The new bed starts VACANT.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def add_bed(self, info: Info, room_id: strawberry.ID) -> BedType:
+        with transaction.atomic():
+            try:
+                room = Room.objects.select_for_update().get(pk=room_id)
+            except Room.DoesNotExist:
+                raise GraphQLError('Room not found.')
+            bed = Bed.objects.create(
+                room=room, label=Bed.next_label(room), status=BedStatus.VACANT
+            )
+            # Keep the nominal capacity from lagging behind real beds.
+            count = room.beds.count()
+            if count > room.capacity:
+                room.capacity = count
+                room.save(update_fields=['capacity'])
+        return bed
+
     # Admit an EXISTING patient (new admission for a zero-admission patient, or a
     # re-admission after discharge). ADMIN only. Creates a new Admission with its
     # own independent Fee (Fee invariant #8) — the prior admission's Fee history
