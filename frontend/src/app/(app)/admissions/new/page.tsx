@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@apollo/client";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -16,15 +16,33 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getAccessToken } from "@/lib/auth";
-import { CREATE_ADMISSION, VACANT_BEDS } from "@/lib/graphql/operations";
+import {
+  ADD_BED,
+  CREATE_ADMISSION,
+  ROOMS_WITH_BEDS,
+} from "@/lib/graphql/operations";
 
-type VacantBedsResult = {
-  beds: Array<{
-    id: string;
-    label: string;
-    room: { id: string; name: string };
-  }>;
+type BedLite = { id: string; label: string; status: string };
+type RoomsResult = {
+  rooms: Array<{ id: string; name: string; beds: BedLite[] }>;
 };
+
+// Preview the next auto-incremented label for a room's beds (mirrors the
+// server: highest numeric suffix + 1, keeping the prefix; B1 when empty).
+function nextBedLabel(beds: BedLite[]): string {
+  let prefix = "B";
+  let highest = 0;
+  let found = false;
+  for (const b of beds) {
+    const m = /^\s*([A-Za-z]*)\s*(\d+)\s*$/.exec(b.label ?? "");
+    if (m && (!found || Number(m[2]) > highest)) {
+      found = true;
+      highest = Number(m[2]);
+      prefix = m[1] || "B";
+    }
+  }
+  return `${prefix}${highest + 1}`;
+}
 
 type CreateAdmissionResult = {
   createAdmission: {
@@ -63,6 +81,8 @@ export default function NewAdmissionPage() {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<AdmissionForm>({
     defaultValues: {
@@ -80,15 +100,32 @@ export default function NewAdmissionPage() {
     },
   });
 
-  // Bed picker fetches only VACANT beds.
-  const { data: bedsData, loading: bedsLoading, error: bedsError } =
-    useQuery<VacantBedsResult>(VACANT_BEDS);
+  // Bed picker: choose a room, then a vacant bed in it (or add one).
+  const [roomId, setRoomId] = useState("");
+  const { data: roomsData, loading: roomsLoading, error: roomsError, refetch } =
+    useQuery<RoomsResult>(ROOMS_WITH_BEDS);
+
+  const selectedBedId = watch("bedId");
+  const selectedRoom = roomsData?.rooms.find((r) => r.id === roomId);
+  const vacantBeds =
+    selectedRoom?.beds.filter((b) => b.status === "VACANT") ?? [];
+
+  const [addBed, { loading: addingBed, error: addBedError }] = useMutation(
+    ADD_BED,
+    {
+      onCompleted: async (data) => {
+        await refetch();
+        setValue("bedId", data.addBed.id, { shouldValidate: true });
+      },
+      onError: () => {},
+    }
+  );
 
   const [createAdmission, { loading: submitting, error: mutationError }] =
     useMutation<CreateAdmissionResult>(CREATE_ADMISSION, {
-      // The new admission occupies a bed and creates a patient, so any cached
-      // bed/patient lists are now stale.
-      refetchQueries: [{ query: VACANT_BEDS }],
+      // The new admission occupies a bed and creates a patient, so cached
+      // room/bed/patient lists are now stale.
+      refetchQueries: [{ query: ROOMS_WITH_BEDS }],
       onCompleted: (data) => {
         router.push(`/patients/${data.createAdmission.patient.id}`);
       },
@@ -209,39 +246,93 @@ export default function NewAdmissionPage() {
               ) : null}
             </div>
 
-            {/* Bed picker (VACANT only) + monthly fee */}
+            {/* Room + bed picker + monthly fee */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="roomId">Room</Label>
+                <select
+                  id="roomId"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={roomId}
+                  disabled={roomsLoading}
+                  onChange={(e) => {
+                    setRoomId(e.target.value);
+                    setValue("bedId", "");
+                  }}
+                >
+                  <option value="" disabled>
+                    {roomsLoading ? "Loading rooms…" : "Select a room"}
+                  </option>
+                  {roomsData?.rooms.map((r) => {
+                    const free = r.beds.filter(
+                      (b) => b.status === "VACANT"
+                    ).length;
+                    return (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({free} vacant)
+                      </option>
+                    );
+                  })}
+                </select>
+                {roomsError ? (
+                  <p className="text-sm text-red-600">
+                    Couldn’t load rooms: {roomsError.message}
+                  </p>
+                ) : null}
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="bedId">Bed</Label>
                 <select
                   id="bedId"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  defaultValue=""
-                  disabled={bedsLoading}
+                  disabled={!roomId || vacantBeds.length === 0}
                   {...register("bedId", { required: "Please choose a bed" })}
                 >
                   <option value="" disabled>
-                    {bedsLoading ? "Loading beds…" : "Select a vacant bed"}
+                    {!roomId
+                      ? "Select a room first"
+                      : vacantBeds.length === 0
+                        ? "No vacant beds"
+                        : "Select a vacant bed"}
                   </option>
-                  {bedsData?.beds.map((bed) => (
+                  {vacantBeds.map((bed) => (
                     <option key={bed.id} value={bed.id}>
-                      {bed.room.name} — {bed.label}
+                      {bed.label}
                     </option>
                   ))}
                 </select>
-                {errors.bedId ? (
+                {errors.bedId && !selectedBedId ? (
                   <p className="text-sm text-red-600">{errors.bedId.message}</p>
                 ) : null}
-                {bedsError ? (
-                  <p className="text-sm text-red-600">
-                    Couldn’t load beds: {bedsError.message}
-                  </p>
-                ) : !bedsLoading && bedsData?.beds.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No vacant beds available.
-                  </p>
+                {roomId && vacantBeds.length === 0 && selectedRoom ? (
+                  <div className="space-y-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={addingBed}
+                      onClick={() => addBed({ variables: { roomId } })}
+                    >
+                      {addingBed
+                        ? "Adding bed…"
+                        : `Add bed ${nextBedLabel(selectedRoom.beds)} to ${selectedRoom.name}`}
+                    </Button>
+                    {addBedError ? (
+                      <p className="text-sm text-red-600">
+                        {addBedError.message}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        This room is full — add a bed to admit here.
+                      </p>
+                    )}
+                  </div>
                 ) : null}
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="monthlyFee">Monthly fee</Label>
                 <Input

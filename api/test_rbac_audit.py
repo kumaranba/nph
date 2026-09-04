@@ -121,6 +121,7 @@ OPERATIONS = [
         ' monthlyFee: "1"}) { id } }',
         {"ADMIN"},
     ),
+    ("addBed", 'mutation { addBed(roomId: "999999") { id } }', {"ADMIN"}),
     (
         "createUser",
         'mutation { createUser(email: "audit-new@nph.test", password: "password123",'

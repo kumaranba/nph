@@ -151,6 +151,37 @@ export const VACANT_BEDS = gql`
   }
 `;
 
+// Rooms with all their beds (label + status) — powers the admission bed picker
+// (choose a room, then a vacant bed within it, or add a new bed).
+export const ROOMS_WITH_BEDS = gql`
+  query RoomsWithBeds {
+    rooms {
+      id
+      name
+      beds {
+        id
+        label
+        status
+      }
+    }
+  }
+`;
+
+// Add a bed to a room; the server auto-labels it the next in sequence.
+export const ADD_BED = gql`
+  mutation AddBed($roomId: ID!) {
+    addBed(roomId: $roomId) {
+      id
+      label
+      status
+      room {
+        id
+        name
+      }
+    }
+  }
+`;
+
 export const CREATE_ADMISSION = gql`
   mutation CreateAdmission($input: CreateAdmissionInput!) {
     createAdmission(input: $input) {

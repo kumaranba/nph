@@ -1,16 +1,22 @@
 "use client";
 
 import { useMutation, useQuery } from "@apollo/client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PATIENT, READMIT_PATIENT, VACANT_BEDS } from "@/lib/graphql/operations";
+import {
+  ADD_BED,
+  PATIENT,
+  READMIT_PATIENT,
+  ROOMS_WITH_BEDS,
+} from "@/lib/graphql/operations";
 
-type VacantBeds = {
-  beds: Array<{ id: string; label: string; room: { id: string; name: string } }>;
+type BedLite = { id: string; label: string; status: string };
+type RoomsResult = {
+  rooms: Array<{ id: string; name: string; beds: BedLite[] }>;
 };
 
 type ReadmitForm = {
@@ -18,6 +24,22 @@ type ReadmitForm = {
   monthlyFee: string;
   bedId: string;
 };
+
+// Preview the next auto-incremented bed label for a room (mirrors the server).
+function nextBedLabel(beds: BedLite[]): string {
+  let prefix = "B";
+  let highest = 0;
+  let found = false;
+  for (const b of beds) {
+    const m = /^\s*([A-Za-z]*)\s*(\d+)\s*$/.exec(b.label ?? "");
+    if (m && (!found || Number(m[2]) > highest)) {
+      found = true;
+      highest = Number(m[2]);
+      prefix = m[1] || "B";
+    }
+  }
+  return `${prefix}${highest + 1}`;
+}
 
 export function ReadmitModal({
   patientId,
@@ -30,7 +52,7 @@ export function ReadmitModal({
   title: string;
   onClose: () => void;
 }) {
-  const { register, handleSubmit } = useForm<ReadmitForm>({
+  const { register, handleSubmit, setValue } = useForm<ReadmitForm>({
     defaultValues: {
       admissionDate: new Date().toISOString().slice(0, 10),
       monthlyFee: "",
@@ -38,12 +60,28 @@ export function ReadmitModal({
     },
   });
 
-  const { data: bedsData, loading: bedsLoading } = useQuery<VacantBeds>(VACANT_BEDS);
+  const [roomId, setRoomId] = useState("");
+  const { data: roomsData, loading: roomsLoading, refetch } =
+    useQuery<RoomsResult>(ROOMS_WITH_BEDS);
+  const selectedRoom = roomsData?.rooms.find((r) => r.id === roomId);
+  const vacantBeds =
+    selectedRoom?.beds.filter((b) => b.status === "VACANT") ?? [];
+
+  const [addBed, { loading: addingBed, error: addBedError }] = useMutation(
+    ADD_BED,
+    {
+      onCompleted: async (data) => {
+        await refetch();
+        setValue("bedId", data.addBed.id);
+      },
+      onError: () => {},
+    }
+  );
 
   const [readmit, { loading, error }] = useMutation(READMIT_PATIENT, {
     refetchQueries: [
       { query: PATIENT, variables: { pk: patientId } },
-      { query: VACANT_BEDS },
+      { query: ROOMS_WITH_BEDS },
     ],
     onCompleted: onClose,
     onError: () => {},
@@ -67,6 +105,9 @@ export function ReadmitModal({
       },
     });
   }
+
+  const selectCls =
+    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
   return (
     <div
@@ -104,22 +145,71 @@ export function ReadmitModal({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ra-bed">Bed (optional)</Label>
+            <Label htmlFor="ra-room">Room (optional)</Label>
             <select
-              id="ra-bed"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              defaultValue=""
-              disabled={bedsLoading}
-              {...register("bedId")}
+              id="ra-room"
+              className={selectCls}
+              value={roomId}
+              disabled={roomsLoading}
+              onChange={(e) => {
+                setRoomId(e.target.value);
+                setValue("bedId", "");
+              }}
             >
-              <option value="">No bed</option>
-              {bedsData?.beds.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.room.name} — {b.label}
-                </option>
-              ))}
+              <option value="">Assign later (no bed)</option>
+              {roomsData?.rooms.map((r) => {
+                const free = r.beds.filter((b) => b.status === "VACANT").length;
+                return (
+                  <option key={r.id} value={r.id}>
+                    {r.name} ({free} vacant)
+                  </option>
+                );
+              })}
             </select>
           </div>
+          {roomId ? (
+            <div className="space-y-2">
+              <Label htmlFor="ra-bed">Bed</Label>
+              <select
+                id="ra-bed"
+                className={selectCls}
+                disabled={vacantBeds.length === 0}
+                {...register("bedId")}
+              >
+                <option value="">
+                  {vacantBeds.length === 0 ? "No vacant beds" : "Select a bed"}
+                </option>
+                {vacantBeds.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+              {vacantBeds.length === 0 && selectedRoom ? (
+                <div className="space-y-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={addingBed}
+                    onClick={() => addBed({ variables: { roomId } })}
+                  >
+                    {addingBed
+                      ? "Adding bed…"
+                      : `Add bed ${nextBedLabel(selectedRoom.beds)} to ${selectedRoom.name}`}
+                  </Button>
+                  {addBedError ? (
+                    <p className="text-sm text-red-600">{addBedError.message}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      This room is full — add a bed to admit here.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {error ? <p className="text-sm text-red-600">{error.message}</p> : null}
 
