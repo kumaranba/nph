@@ -108,6 +108,8 @@ OPERATIONS = [
     ("vitalHistory", '{ vitalHistory(patientId: "1") { id } }', {"ADMIN", "NURSE"}),
     ("flaggedVitals", "{ flaggedVitals { id } }", {"ADMIN", "NURSE"}),
     # --- Dashboard queries ------------------------------------------------
+    ("patientsOnPermission", "{ patientsOnPermission { id } }", ALL),
+    ("permissions", '{ permissions(admissionId: "1") { id } }', ALL),
     ("dashboardStats", "{ dashboardStats { bedsTotal } }", ALL),
     ("recentAdmissions", "{ recentAdmissions { id } }", ALL),
     ("wards", "{ wards { id } }", ALL),
@@ -122,6 +124,16 @@ OPERATIONS = [
         {"ADMIN"},
     ),
     ("addBed", 'mutation { addBed(roomId: "999999") { id } }', {"ADMIN"}),
+    (
+        "startPermission",
+        'mutation { startPermission(admissionId: "999999", startDate: "2026-01-01") { id } }',
+        {"ADMIN"},
+    ),
+    (
+        "endPermission",
+        'mutation { endPermission(permissionId: "999999") { id } }',
+        {"ADMIN"},
+    ),
     (
         "createUser",
         'mutation { createUser(email: "audit-new@nph.test", password: "password123",'

@@ -185,6 +185,22 @@ class AdmissionType:
         return FeeService.next_uninvoiced_cycle(self)
 
 
+@strawberry_django.type(models.Permission)
+class PermissionType:
+    id: auto
+    start_date: auto
+    expected_return: auto
+    return_date: auto
+    note: auto
+    created_at: auto
+    admission: AdmissionType
+    recorded_by: Optional[UserType]
+
+    @strawberry.field
+    def is_out(self) -> bool:
+        return self.return_date is None
+
+
 @strawberry_django.type(models.Fee)
 class FeeType:
     id: auto

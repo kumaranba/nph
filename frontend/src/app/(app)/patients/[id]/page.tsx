@@ -15,6 +15,7 @@ import { ActivityTimeline } from "@/components/activity-timeline";
 import { ConsentControl } from "@/components/consent-control";
 import { ContactActions } from "@/components/contact-actions";
 import { PatientFollowUpsPanel } from "@/components/patient-follow-ups-panel";
+import { PatientPermissionPanel } from "@/components/patient-permission-panel";
 import { ReadmitModal } from "@/components/readmit-modal";
 import { formatDate } from "@/lib/format-date";
 import { PatientTagsPanel } from "@/components/patient-tags-panel";
@@ -224,6 +225,13 @@ export default function PatientProfilePage() {
               </dl>
 
               <AdmissionHistory admissions={patient.admissions} />
+
+              {activeAdmission ? (
+                <PatientPermissionPanel
+                  admissionId={activeAdmission.id}
+                  canManage={role === "ADMIN"}
+                />
+              ) : null}
 
               <PatientTagsPanel
                 patientId={patient.id}

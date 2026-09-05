@@ -27,7 +27,7 @@ from .models import (
     FollowUpKind, FoodPreference, FoodRate, Gender, Inquiry, InquirySource,
     InquiryStatus, LostReason, Invoice,
     InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
-    Referrer, ReferrerKind, Room,
+    Permission, Referrer, ReferrerKind, Room,
     Staff, StaffDesignation, StaffMealRate, SystemSetting, Tag, TagCategory,
     User, UserRole, VitalReading, VitalsThreshold, Waiver,
 )
@@ -35,7 +35,8 @@ from .permissions import login_required, require_roles
 from .types import (
     ActivityType, AdditionalChargeType, AdmissionType, AttendanceType, BedType,
     FeeType, FollowUpType, FoodRateType, InquiryType, InvoiceType, PatientType,
-    PaymentAccountType, PaymentReceiptType, PaymentType, ReferrerType, RoomType,
+    PaymentAccountType, PaymentReceiptType, PaymentType, PermissionType,
+    ReferrerType, RoomType,
     StaffMealRateType, StaffType, TagType, UserType, VitalReadingType,
     VitalsThresholdType,
 )
@@ -1943,6 +1944,32 @@ class Query:
     def patient(self, info: Info, pk: strawberry.ID) -> Optional[PatientType]:
         return Patient.objects.filter(pk=pk).first()
 
+    # In-patients currently out on permission (home leave, not discharged), for
+    # the dashboard. Any authenticated role.
+    @strawberry.field
+    @login_required
+    def patients_on_permission(self, info: Info) -> List[PermissionType]:
+        return (
+            Permission.objects.filter(
+                return_date__isnull=True,
+                admission__status=AdmissionStatus.ACTIVE,
+            )
+            .select_related('admission__patient', 'admission__bed__room')
+            .order_by('start_date', 'id')
+        )
+
+    # Permission history for one admission (most recent first). Any auth role.
+    @strawberry.field
+    @login_required
+    def permissions(
+        self, info: Info, admission_id: strawberry.ID
+    ) -> List[PermissionType]:
+        return (
+            Permission.objects.filter(admission_id=admission_id)
+            .select_related('admission__patient', 'recorded_by')
+            .order_by('-start_date', '-id')
+        )
+
     # Fuzzy patient search across name, patient_id, guardian name and phone.
     # Open to any authenticated role. Each result carries the patient's current
     # admission (date/room/bed) and a derived fee status.
@@ -2489,6 +2516,60 @@ class Mutation:
                 room.capacity = count
                 room.save(update_fields=['capacity'])
         return bed
+
+    # Put an active in-patient on permission (home leave, without discharge).
+    # The bed stays theirs and full fees still apply. ADMIN only. Rejected if the
+    # admission isn't active or is already out on an open permission.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def start_permission(
+        self,
+        info: Info,
+        admission_id: strawberry.ID,
+        start_date: date,
+        expected_return: Optional[date] = None,
+        note: Optional[str] = None,
+    ) -> PermissionType:
+        try:
+            admission = Admission.objects.get(pk=admission_id)
+        except Admission.DoesNotExist:
+            raise GraphQLError('Admission not found.')
+        if admission.status != AdmissionStatus.ACTIVE:
+            raise GraphQLError('Only an admitted patient can go on permission.')
+        if admission.permissions.filter(return_date__isnull=True).exists():
+            raise GraphQLError('This patient is already out on permission.')
+        if expected_return is not None and expected_return < start_date:
+            raise GraphQLError('Expected return cannot precede the start date.')
+        return Permission.objects.create(
+            admission=admission,
+            start_date=start_date,
+            expected_return=expected_return,
+            note=(note or '').strip(),
+            recorded_by=info.context.request.user,
+        )
+
+    # Mark a permission returned (patient back on the ward). ADMIN only.
+    # Idempotent target — returning an already-closed one is rejected.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def end_permission(
+        self,
+        info: Info,
+        permission_id: strawberry.ID,
+        return_date: Optional[date] = None,
+    ) -> PermissionType:
+        try:
+            permission = Permission.objects.get(pk=permission_id)
+        except Permission.DoesNotExist:
+            raise GraphQLError('Permission record not found.')
+        if permission.return_date is not None:
+            raise GraphQLError('This permission is already closed.')
+        rd = return_date or _today()
+        if rd < permission.start_date:
+            raise GraphQLError('Return date cannot precede the start date.')
+        permission.return_date = rd
+        permission.save(update_fields=['return_date'])
+        return permission
 
     # Admit an EXISTING patient (new admission for a zero-admission patient, or a
     # re-admission after discharge). ADMIN only. Creates a new Admission with its

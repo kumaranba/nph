@@ -523,6 +523,40 @@ class AdditionalCharge(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# Permission (temporary home leave, without discharge)
+# ---------------------------------------------------------------------------
+
+class Permission(models.Model):
+    """A period an in-patient spends at home on permission, without being
+    discharged. The bed stays theirs and full fees still apply (no proration) —
+    this is purely a record so staff can see who is currently out. Open while
+    ``return_date`` is null; closed when the patient returns."""
+    admission = models.ForeignKey(
+        Admission, on_delete=models.PROTECT, related_name='permissions'
+    )
+    start_date = models.DateField()
+    expected_return = models.DateField(null=True, blank=True)
+    return_date = models.DateField(null=True, blank=True)
+    note = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, related_name='recorded_permissions',
+        null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-start_date', '-id']
+
+    @property
+    def is_out(self) -> bool:
+        return self.return_date is None
+
+    def __str__(self):
+        state = 'out' if self.is_out else 'returned'
+        return f'Permission #{self.pk} — Admission #{self.admission_id} ({state})'
+
+
+# ---------------------------------------------------------------------------
 # VitalReading
 # ---------------------------------------------------------------------------
 
