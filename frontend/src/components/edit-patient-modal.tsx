@@ -12,6 +12,7 @@ import { PATIENT, UPDATE_PATIENT } from "@/lib/graphql/operations";
 export type EditablePatient = {
   id: string;
   name: string;
+  alternateId: string | null;
   dateOfBirth: string | null;
   gender: string;
   diagnosis: string;
@@ -26,6 +27,7 @@ export type EditablePatient = {
 
 type EditForm = {
   name: string;
+  alternateId: string;
   dateOfBirth: string;
   gender: string;
   diagnosis: string;
@@ -53,6 +55,7 @@ export function EditPatientModal({
   } = useForm<EditForm>({
     defaultValues: {
       name: patient.name,
+      alternateId: patient.alternateId ?? "",
       dateOfBirth: patient.dateOfBirth ?? "",
       gender: patient.gender ?? "",
       diagnosis: patient.diagnosis,
@@ -87,6 +90,7 @@ export function EditPatientModal({
         patientId: patient.id,
         input: {
           name: values.name,
+          alternateId: values.alternateId.trim() || null,
           dateOfBirth: values.dateOfBirth || null,
           gender: values.gender || null,
           diagnosis: values.diagnosis,
@@ -125,6 +129,15 @@ export function EditPatientModal({
             {errors.name ? (
               <p className="text-sm text-red-600">{errors.name.message}</p>
             ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-altid">Alternate ID (optional)</Label>
+            <Input
+              id="edit-altid"
+              placeholder="e.g. old register no."
+              {...register("alternateId")}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
