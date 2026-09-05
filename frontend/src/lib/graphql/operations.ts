@@ -151,6 +151,75 @@ export const VACANT_BEDS = gql`
   }
 `;
 
+// --- Patient permission (home leave without discharge) --------------------
+
+export const PATIENTS_ON_PERMISSION = gql`
+  query PatientsOnPermission {
+    patientsOnPermission {
+      id
+      startDate
+      expectedReturn
+      admission {
+        id
+        patient {
+          id
+          patientId
+          name
+          gender
+        }
+        bed {
+          id
+          label
+          room {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const PERMISSIONS = gql`
+  query Permissions($admissionId: ID!) {
+    permissions(admissionId: $admissionId) {
+      id
+      startDate
+      expectedReturn
+      returnDate
+      note
+      isOut
+    }
+  }
+`;
+
+export const START_PERMISSION = gql`
+  mutation StartPermission(
+    $admissionId: ID!
+    $startDate: Date!
+    $expectedReturn: Date
+    $note: String
+  ) {
+    startPermission(
+      admissionId: $admissionId
+      startDate: $startDate
+      expectedReturn: $expectedReturn
+      note: $note
+    ) {
+      id
+    }
+  }
+`;
+
+export const END_PERMISSION = gql`
+  mutation EndPermission($permissionId: ID!, $returnDate: Date) {
+    endPermission(permissionId: $permissionId, returnDate: $returnDate) {
+      id
+      returnDate
+    }
+  }
+`;
+
 // Rooms with all their beds (label + status) — powers the admission bed picker
 // (choose a room, then a vacant bed within it, or add a new bed).
 export const ROOMS_WITH_BEDS = gql`
