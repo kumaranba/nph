@@ -350,6 +350,7 @@ class UpdatePatientInput:
     be explicitly cleared by sending null.
     """
     name: Optional[str] = strawberry.UNSET
+    alternate_id: Optional[str] = strawberry.UNSET
     date_of_birth: Optional[date] = strawberry.UNSET
     gender: Optional[GenderEnum] = strawberry.UNSET
     diagnosis: Optional[str] = strawberry.UNSET
@@ -1956,6 +1957,7 @@ class Query:
             Patient.objects.filter(
                 Q(name__icontains=term)
                 | Q(patient_id__icontains=term)
+                | Q(alternate_id__icontains=term)
                 | Q(guardian_name__icontains=term)
                 | Q(guardian_phone__icontains=term)
             )
@@ -2567,6 +2569,16 @@ class Mutation:
                 raise GraphQLError('Patient name cannot be empty.')
             patient.name = input.name.strip()
             update_fields.append('name')
+        if input.alternate_id is not UNSET:
+            # Stored NULL (not '') when blank so multiple patients may have none
+            # while a set value stays unique.
+            alt = (input.alternate_id or '').strip() or None
+            if alt and Patient.objects.filter(
+                alternate_id=alt
+            ).exclude(pk=patient.pk).exists():
+                raise GraphQLError('That alternate ID is already in use.')
+            patient.alternate_id = alt
+            update_fields.append('alternate_id')
         if input.date_of_birth is not UNSET:
             patient.date_of_birth = input.date_of_birth
             update_fields.append('date_of_birth')
@@ -2608,7 +2620,14 @@ class Mutation:
             update_fields.append('aadhar_number')
 
         if update_fields:
-            patient.save(update_fields=update_fields)
+            from django.db import IntegrityError, transaction as _txn
+            try:
+                with _txn.atomic():
+                    patient.save(update_fields=update_fields)
+            except IntegrityError:
+                # Backstop for a race on the unique alternate_id (savepoint keeps
+                # the surrounding transaction usable).
+                raise GraphQLError('That alternate ID is already in use.')
         return patient
 
     # Attach one or more tags to a patient, creating any that don't yet exist

@@ -227,6 +227,7 @@ export const PATIENT = gql`
     patient(pk: $pk) {
       id
       patientId
+      alternateId
       name
       age
       dateOfBirth
@@ -305,6 +306,7 @@ export const UPDATE_PATIENT = gql`
     updatePatient(patientId: $patientId, input: $input) {
       id
       name
+      alternateId
       age
       dateOfBirth
       gender

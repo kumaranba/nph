@@ -182,6 +182,12 @@ class Patient(models.Model):
     The sequential counter restarts each calendar year.
     """
     patient_id = models.CharField(max_length=20, unique=True, editable=False)
+    # Optional externally-meaningful identifier (e.g. an old register / govt id).
+    # Unique when set; stored NULL (not '') when blank so multiple patients may
+    # have none. Editable in the profile and searchable.
+    alternate_id = models.CharField(
+        max_length=50, unique=True, null=True, blank=True
+    )
     name = models.CharField(max_length=255)
     # Deprecated: the stored age is retired in favour of the computed `age`
     # property (from date_of_birth). Kept one release as a rollback reference;

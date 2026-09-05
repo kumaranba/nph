@@ -68,6 +68,7 @@ class TagType:
 class PatientType:
     id: auto
     patient_id: auto
+    alternate_id: auto
     name: auto
     date_of_birth: auto
     gender: auto

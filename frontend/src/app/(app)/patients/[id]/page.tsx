@@ -51,6 +51,7 @@ type PatientResult = {
   patient: {
     id: string;
     patientId: string;
+    alternateId: string | null;
     name: string;
     age: number | null;
     dateOfBirth: string | null;
@@ -163,6 +164,7 @@ export default function PatientProfilePage() {
           {patient ? (
             <>
               <dl className="space-y-2 text-sm">
+                <Row label="Alternate ID" value={patient.alternateId || "—"} />
                 <Row
                   label="Age"
                   value={patient.age === null ? "—" : String(patient.age)}
@@ -373,6 +375,7 @@ export default function PatientProfilePage() {
           patient={{
             id: patient.id,
             name: patient.name,
+            alternateId: patient.alternateId,
             dateOfBirth: patient.dateOfBirth,
             gender: patient.gender,
             diagnosis: patient.diagnosis,
