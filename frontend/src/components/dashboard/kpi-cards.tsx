@@ -11,6 +11,10 @@ import { formatLakh } from "@/components/dashboard/format";
 type Stats = {
   bedsOccupied: number;
   bedsTotal: number;
+  maleOccupied: number;
+  femaleOccupied: number;
+  maleOnPermission: number;
+  femaleOnPermission: number;
   outstandingTotal: string;
   outstandingInvoiceCount: number;
   overdueCount: number;
@@ -30,7 +34,6 @@ export function KpiCards() {
   const { data, loading } = useQuery<{ dashboardStats: Stats }>(DASHBOARD_STATS);
   const s = data?.dashboardStats;
   const occPct = s && s.bedsTotal ? Math.round((s.bedsOccupied / s.bedsTotal) * 100) : 0;
-  const vacant = s ? s.bedsTotal - s.bedsOccupied : 0;
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -53,8 +56,24 @@ export function KpiCards() {
             <div className="mt-3 h-1.5 overflow-hidden rounded bg-muted">
               <div className="h-full rounded bg-emerald-600" style={{ width: `${occPct}%` }} />
             </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              {vacant} vacant · <span className="font-semibold text-emerald-700">{occPct}% full</span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+              <span>
+                <span className="font-semibold text-foreground">M</span>{" "}
+                {s?.maleOccupied ?? 0}
+                {s?.maleOnPermission
+                  ? ` (${s.maleOnPermission} out)`
+                  : ""}
+              </span>
+              <span className="h-[3px] w-[3px] rounded-full bg-border" />
+              <span>
+                <span className="font-semibold text-foreground">F</span>{" "}
+                {s?.femaleOccupied ?? 0}
+                {s?.femaleOnPermission
+                  ? ` (${s.femaleOnPermission} out)`
+                  : ""}
+              </span>
+              <span className="h-[3px] w-[3px] rounded-full bg-border" />
+              <span className="font-semibold text-emerald-700">{occPct}% full</span>
             </div>
           </>
         )}

@@ -19,8 +19,10 @@ from .models import (
     AdmissionStatus,
     Bed,
     BedStatus,
+    Gender,
     InvoiceStatus,
     Payment,
+    Permission,
     VitalReading,
 )
 
@@ -105,9 +107,27 @@ def compute_stats() -> dict:
     flagged = flagged_vital_items()
     fees_count, fees_total, fees_today = _fees_due()
 
+    # Occupancy split by the occupant's gender (an occupied bed is held by an
+    # active admission). Patients on permission still hold their bed, so they're
+    # a subset of occupancy — reported separately.
+    occupied = Admission.objects.filter(
+        status=AdmissionStatus.ACTIVE, bed__isnull=False
+    )
+    on_permission = Permission.objects.filter(
+        return_date__isnull=True, admission__status=AdmissionStatus.ACTIVE
+    )
+
     return {
         "beds_occupied": Bed.objects.filter(status=BedStatus.OCCUPIED).count(),
         "beds_total": Bed.objects.count(),
+        "male_occupied": occupied.filter(patient__gender=Gender.MALE).count(),
+        "female_occupied": occupied.filter(patient__gender=Gender.FEMALE).count(),
+        "male_on_permission": on_permission.filter(
+            admission__patient__gender=Gender.MALE
+        ).count(),
+        "female_on_permission": on_permission.filter(
+            admission__patient__gender=Gender.FEMALE
+        ).count(),
         "outstanding_total": _outstanding_total(),
         "outstanding_invoice_count": Invoice.objects.filter(
             status__in=_OUTSTANDING
