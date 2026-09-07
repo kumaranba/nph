@@ -1129,6 +1129,10 @@ def _resolve_active_account(account_id):
 class DashboardStats:
     beds_occupied: int
     beds_total: int
+    male_occupied: int
+    female_occupied: int
+    male_on_permission: int
+    female_on_permission: int
     outstanding_total: Decimal
     outstanding_invoice_count: int
     overdue_count: int

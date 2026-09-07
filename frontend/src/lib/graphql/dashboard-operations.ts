@@ -15,6 +15,10 @@ export const DASHBOARD_STATS = gql`
     dashboardStats {
       bedsOccupied
       bedsTotal
+      maleOccupied
+      femaleOccupied
+      maleOnPermission
+      femaleOnPermission
       outstandingTotal
       outstandingInvoiceCount
       overdueCount

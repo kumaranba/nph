@@ -175,3 +175,58 @@ def test_activity_log(admin_client, seeded):
     kinds = {a["kind"] for a in result["data"]["activityLog"]}
     # Synthesized from multiple sources.
     assert {"payment", "admission", "charge", "vitals"} <= kinds
+
+
+# --- occupancy split by gender + on-permission -----------------------------
+
+from api.dashboard import compute_stats  # noqa: E402
+from api.models import Gender, Permission  # noqa: E402
+
+
+def test_occupancy_split_by_gender_and_permission(db):
+    room = Room.objects.create(name="MW1", capacity=3)
+    b1 = Bed.objects.create(room=room, label="B1", status=BedStatus.OCCUPIED)
+    b2 = Bed.objects.create(room=room, label="B2", status=BedStatus.OCCUPIED)
+    Bed.objects.create(room=room, label="B3", status=BedStatus.VACANT)
+
+    male = Patient.objects.create(
+        name="Ravi", gender=Gender.MALE, diagnosis="d", admitting_doctor="Dr"
+    )
+    female = Patient.objects.create(
+        name="Meena", gender=Gender.FEMALE, diagnosis="d", admitting_doctor="Dr"
+    )
+    m_adm = Admission.objects.create(
+        patient=male, bed=b1, admission_date=date(2026, 1, 1),
+        monthly_fee=1, status=AdmissionStatus.ACTIVE,
+    )
+    Admission.objects.create(
+        patient=female, bed=b2, admission_date=date(2026, 1, 1),
+        monthly_fee=1, status=AdmissionStatus.ACTIVE,
+    )
+    # The male patient is out on permission (still holds his bed).
+    Permission.objects.create(admission=m_adm, start_date=date(2026, 2, 1))
+
+    stats = compute_stats()
+    assert stats["beds_occupied"] == 2
+    assert stats["male_occupied"] == 1
+    assert stats["female_occupied"] == 1
+    assert stats["male_on_permission"] == 1
+    assert stats["female_on_permission"] == 0
+
+
+def test_returned_permission_not_counted_out(db):
+    room = Room.objects.create(name="MW1", capacity=1)
+    bed = Bed.objects.create(room=room, label="B1", status=BedStatus.OCCUPIED)
+    p = Patient.objects.create(
+        name="Ravi", gender=Gender.MALE, diagnosis="d", admitting_doctor="Dr"
+    )
+    adm = Admission.objects.create(
+        patient=p, bed=bed, admission_date=date(2026, 1, 1),
+        monthly_fee=1, status=AdmissionStatus.ACTIVE,
+    )
+    Permission.objects.create(
+        admission=adm, start_date=date(2026, 2, 1), return_date=date(2026, 2, 3)
+    )
+    stats = compute_stats()
+    assert stats["male_occupied"] == 1
+    assert stats["male_on_permission"] == 0     # already back
