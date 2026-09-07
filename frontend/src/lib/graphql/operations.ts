@@ -485,6 +485,7 @@ export const SYSTEM_SETTINGS = gql`
   query SystemSettings {
     systemSettings {
       feeDueWarningDays
+      maxInpatientDays
       vitalsThresholds {
         vitalType
         belowThreshold
@@ -497,13 +498,16 @@ export const SYSTEM_SETTINGS = gql`
 export const UPDATE_SETTINGS = gql`
   mutation UpdateSettings(
     $feeDueWarningDays: Int
+    $maxInpatientDays: Int
     $thresholds: [VitalsThresholdInput!]
   ) {
     updateSettings(
       feeDueWarningDays: $feeDueWarningDays
+      maxInpatientDays: $maxInpatientDays
       thresholds: $thresholds
     ) {
       feeDueWarningDays
+      maxInpatientDays
       vitalsThresholds {
         vitalType
         belowThreshold

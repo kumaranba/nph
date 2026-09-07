@@ -32,6 +32,30 @@ export const DASHBOARD_STATS = gql`
   }
 `;
 
+export const FORCE_DISCHARGE_DUE_LIST = gql`
+  query ForceDischargeDueList {
+    forceDischargeDueList {
+      forceDischargeDate
+      daysRemaining
+      admission {
+        id
+        admissionDate
+        patient {
+          id
+          patientId
+          name
+        }
+        bed {
+          label
+          room {
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const PAYMENTS_TREND = gql`
   query PaymentsTrend($months: Int) {
     paymentsTrend(months: $months) {

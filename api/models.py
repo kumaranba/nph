@@ -642,6 +642,11 @@ class SystemSetting(models.Model):
     fee_due_warning_days = models.PositiveIntegerField(
         default=default_fee_due_warning_days
     )
+    # Maximum days a patient may stay as an in-patient before they must be
+    # discharged and re-admitted. 0 disables the limit (no force-discharge
+    # reminders). The clock runs from admission_date; permission does not pause
+    # it. A reminder list surfaces admissions within 30 days of this limit.
+    max_inpatient_days = models.PositiveIntegerField(default=0)
 
     class Meta:
         verbose_name = 'System settings'

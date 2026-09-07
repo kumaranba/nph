@@ -16,6 +16,7 @@ import { RecentAdmissionsCard } from "@/components/dashboard/recent-admissions-c
 import { WardOccupancyCard } from "@/components/dashboard/ward-occupancy-card";
 import { ActivityCard } from "@/components/dashboard/activity-card";
 import { PermissionCard } from "@/components/dashboard/permission-card";
+import { ForceDischargeCard } from "@/components/dashboard/force-discharge-card";
 
 export default function DashboardPage() {
   const me = useMe();
@@ -98,6 +99,7 @@ export default function DashboardPage() {
           <div className="flex min-w-0 flex-col gap-5">
             {showClinicalFeed ? <FlaggedVitalsCard /> : null}
             <RecentAdmissionsCard />
+            <ForceDischargeCard />
             <PermissionCard />
           </div>
         </div>
