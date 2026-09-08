@@ -56,6 +56,22 @@ export const FORCE_DISCHARGE_DUE_LIST = gql`
   }
 `;
 
+export const UPCOMING_BIRTHDAYS = gql`
+  query UpcomingBirthdays {
+    upcomingBirthdays {
+      birthday
+      turningAge
+      daysUntil
+      bedLabel
+      patient {
+        id
+        patientId
+        name
+      }
+    }
+  }
+`;
+
 export const PAYMENTS_TREND = gql`
   query PaymentsTrend($months: Int) {
     paymentsTrend(months: $months) {

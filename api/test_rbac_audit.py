@@ -114,6 +114,7 @@ OPERATIONS = [
         "{ forceDischargeDueList { daysRemaining } }",
         ALL,
     ),
+    ("upcomingBirthdays", "{ upcomingBirthdays { daysUntil } }", ALL),
     ("permissions", '{ permissions(admissionId: "1") { id } }', ALL),
     ("dashboardStats", "{ dashboardStats { bedsTotal } }", ALL),
     ("recentAdmissions", "{ recentAdmissions { id } }", ALL),
