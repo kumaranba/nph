@@ -17,6 +17,7 @@ import { WardOccupancyCard } from "@/components/dashboard/ward-occupancy-card";
 import { ActivityCard } from "@/components/dashboard/activity-card";
 import { PermissionCard } from "@/components/dashboard/permission-card";
 import { ForceDischargeCard } from "@/components/dashboard/force-discharge-card";
+import { BirthdayCard } from "@/components/dashboard/birthday-card";
 
 export default function DashboardPage() {
   const me = useMe();
@@ -101,6 +102,7 @@ export default function DashboardPage() {
             <RecentAdmissionsCard />
             <ForceDischargeCard />
             <PermissionCard />
+            <BirthdayCard />
           </div>
         </div>
 
