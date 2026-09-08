@@ -1214,6 +1214,9 @@ class RecordPaymentResult:
     total_recorded: Decimal
     fees_amount: Decimal
     charges_amount: Decimal
+    # Portion collected for drugs, recorded into the Pharmacy account as its own
+    # receipt (0 when none).
+    pharmacy_amount: Decimal
     account: Optional[str]
     invoices_paid: int
     credit_added: Decimal
@@ -2283,14 +2286,25 @@ class Mutation:
         paid_on: date,
         fees_amount: Decimal = Decimal('0'),
         charges_amount: Decimal = Decimal('0'),
+        pharmacy_amount: Decimal = Decimal('0'),
         account_id: Optional[strawberry.ID] = None,
     ) -> RecordPaymentResult:
-        if fees_amount < 0 or charges_amount < 0:
+        pharmacy_amount = pharmacy_amount or Decimal('0')
+        if fees_amount < 0 or charges_amount < 0 or pharmacy_amount < 0:
             raise GraphQLError('Amounts cannot be negative.')
-        if fees_amount + charges_amount <= 0:
+        if fees_amount + charges_amount + pharmacy_amount <= 0:
             raise GraphQLError('Payment total must be positive.')
 
         account = _resolve_active_account(account_id)
+        pharmacy_account = None
+        if pharmacy_amount > 0:
+            pharmacy_account = PaymentAccount.objects.filter(
+                name='Pharmacy', is_active=True
+            ).first()
+            if pharmacy_account is None:
+                raise GraphQLError(
+                    'Pharmacy account is not set up. Run migrations to seed it.'
+                )
 
         admission = (
             Admission.objects.filter(
@@ -2305,19 +2319,43 @@ class Mutation:
         if admission is None:
             raise GraphQLError('No admission found for this patient.')
 
-        receipt, allocations, credit_added = (
-            BillingService.record_payment_for_admission(
-                admission, fees_amount, charges_amount, paid_on,
-                info.context.request.user, account=account,
+        user = info.context.request.user
+        main_receipt = None
+        allocations = []
+        credit_added = Decimal('0')
+
+        # Fees + non-drug charges → the chosen account.
+        if fees_amount + charges_amount > 0:
+            main_receipt, main_alloc, main_credit = (
+                BillingService.record_payment_for_admission(
+                    admission, fees_amount, charges_amount, paid_on, user,
+                    account=account,
+                )
             )
-        )
+            allocations += main_alloc
+            credit_added += main_credit
+
+        # Drug money → the Pharmacy account, as its own receipt.
+        pharmacy_receipt = None
+        if pharmacy_amount > 0:
+            pharmacy_receipt, ph_alloc, ph_credit = (
+                BillingService.record_payment_for_admission(
+                    admission, Decimal('0'), pharmacy_amount, paid_on, user,
+                    account=pharmacy_account,
+                )
+            )
+            allocations += ph_alloc
+            credit_added += ph_credit
+
+        primary = main_receipt or pharmacy_receipt
         admission.refresh_from_db()
         return RecordPaymentResult(
             patient_id=admission.patient_id,
-            receipt_id=receipt.id,
-            total_recorded=receipt.amount,
-            fees_amount=receipt.fees_amount,
-            charges_amount=receipt.charges_amount,
+            receipt_id=primary.id,
+            total_recorded=fees_amount + charges_amount + pharmacy_amount,
+            fees_amount=fees_amount,
+            charges_amount=charges_amount,
+            pharmacy_amount=pharmacy_amount,
             account=account.name if account else None,
             invoices_paid=len(allocations),
             credit_added=credit_added,

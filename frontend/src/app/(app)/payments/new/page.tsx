@@ -32,6 +32,7 @@ type Admission = {
   status: string;
   monthlyFee: string;
   creditBalance: string;
+  outstandingDrugCharges: string;
 };
 type PatientResult = {
   patient: { id: string; name: string; admissions: Admission[] } | null;
@@ -42,6 +43,7 @@ type RecordResult = {
     totalRecorded: string;
     feesAmount: string;
     chargesAmount: string;
+    pharmacyAmount: string;
     account: string | null;
     invoicesPaid: number;
     creditAdded: string;
@@ -53,6 +55,7 @@ type RecordResult = {
 type PayForm = {
   feesAmount: string;
   chargesAmount: string;
+  pharmacyAmount: string;
   accountId: string;
   paidOn: string;
 };
@@ -128,15 +131,21 @@ function RecordPaymentForm() {
   );
   const monthlyFee = admission ? Number(admission.monthlyFee) : 0;
 
-  const { register, handleSubmit, watch, reset } = useForm<PayForm>({
+  const drugDue = admission ? Number(admission.outstandingDrugCharges) : 0;
+
+  const { register, handleSubmit, watch, reset, setValue } = useForm<PayForm>({
     defaultValues: {
       feesAmount: "",
       chargesAmount: "",
+      pharmacyAmount: "",
       accountId: "",
       paidOn: new Date().toISOString().slice(0, 10),
     },
   });
-  const total = (Number(watch("feesAmount")) || 0) + (Number(watch("chargesAmount")) || 0);
+  const total =
+    (Number(watch("feesAmount")) || 0) +
+    (Number(watch("chargesAmount")) || 0) +
+    (Number(watch("pharmacyAmount")) || 0);
   const monthsPreview = monthlyFee > 0 && total > 0 ? total / monthlyFee : 0;
 
   const [record, { data, loading, error }] = useMutation<RecordResult>(
@@ -152,6 +161,7 @@ function RecordPaymentForm() {
         patientId: selected.id,
         feesAmount: values.feesAmount || "0",
         chargesAmount: values.chargesAmount || "0",
+        pharmacyAmount: values.pharmacyAmount || "0",
         accountId: values.accountId || null,
         paidOn: values.paidOn,
       },
@@ -287,6 +297,34 @@ function RecordPaymentForm() {
                   />
                 </div>
               </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="pharmacyAmount">Pharmacy (drugs)</Label>
+                  {drugDue > 0 ? (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-primary hover:underline"
+                      onClick={() =>
+                        setValue("pharmacyAmount", String(drugDue))
+                      }
+                    >
+                      Use {money(drugDue)} drug charges
+                    </button>
+                  ) : null}
+                </div>
+                <Input
+                  id="pharmacyAmount"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  {...register("pharmacyAmount")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Recorded into the Pharmacy account (separate from fees).
+                </p>
+              </div>
               <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
                 <span className="text-muted-foreground">Total</span>
                 <span className="font-semibold">{money(total)}</span>
@@ -356,6 +394,9 @@ function RecordPaymentForm() {
               <br />
               Fees {money(result.feesAmount)} · Additional charges{" "}
               {money(result.chargesAmount)}
+              {Number(result.pharmacyAmount) > 0
+                ? ` · Pharmacy ${money(result.pharmacyAmount)}`
+                : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

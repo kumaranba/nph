@@ -336,6 +336,7 @@ export const PATIENT = gql`
           effectiveFrom
         }
         outstandingDue
+        outstandingDrugCharges
         hasOutstandingDues
         outstandingInvoiceCount
         bed {
@@ -734,6 +735,7 @@ export const RECORD_PATIENT_PAYMENT = gql`
     $patientId: ID!
     $feesAmount: Decimal!
     $chargesAmount: Decimal!
+    $pharmacyAmount: Decimal
     $paidOn: Date!
     $accountId: ID
   ) {
@@ -741,6 +743,7 @@ export const RECORD_PATIENT_PAYMENT = gql`
       patientId: $patientId
       feesAmount: $feesAmount
       chargesAmount: $chargesAmount
+      pharmacyAmount: $pharmacyAmount
       paidOn: $paidOn
       accountId: $accountId
     ) {
@@ -749,6 +752,7 @@ export const RECORD_PATIENT_PAYMENT = gql`
       totalRecorded
       feesAmount
       chargesAmount
+      pharmacyAmount
       account
       invoicesPaid
       creditAdded
