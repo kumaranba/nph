@@ -1157,6 +1157,16 @@ class ForceDischargeItem:
 
 
 @strawberry.type
+class BirthdayItem:
+    """An in-patient with a birthday today or in the next few days."""
+    patient: 'PatientType'
+    birthday: date           # the upcoming occurrence
+    turning_age: int
+    days_until: int          # 0 = today
+    bed_label: Optional[str]
+
+
+@strawberry.type
 class MonthlyTotal:
     month: str
     total: Decimal
@@ -2004,6 +2014,49 @@ class Query:
                 admission=adm, force_discharge_date=fdd,
                 days_remaining=(fdd - today).days,
             ))
+        return items
+
+    # In-patients with a birthday today or within the next ``within_days`` days
+    # (default 7), soonest first. Computed from date_of_birth; patients without
+    # one are skipped. Any authenticated role.
+    @strawberry.field
+    @login_required
+    def upcoming_birthdays(
+        self, info: Info, within_days: int = 7
+    ) -> List[BirthdayItem]:
+        within = max(0, within_days)
+        today = _today()
+        end = today + timedelta(days=within)
+
+        def _occurrence(dob, year):
+            # Feb 29 falls back to Feb 28 in non-leap years.
+            try:
+                return dob.replace(year=year)
+            except ValueError:
+                return dob.replace(year=year, day=28)
+
+        items = []
+        admissions = (
+            Admission.objects.filter(
+                status=AdmissionStatus.ACTIVE,
+                patient__date_of_birth__isnull=False,
+            )
+            .select_related('patient', 'bed')
+        )
+        for adm in admissions:
+            dob = adm.patient.date_of_birth
+            bday = _occurrence(dob, today.year)
+            if bday < today:
+                bday = _occurrence(dob, today.year + 1)
+            if today <= bday <= end:
+                items.append(BirthdayItem(
+                    patient=adm.patient,
+                    birthday=bday,
+                    turning_age=bday.year - dob.year,
+                    days_until=(bday - today).days,
+                    bed_label=adm.bed.label if adm.bed else None,
+                ))
+        items.sort(key=lambda i: (i.days_until, i.patient.name))
         return items
 
     # Permission history for one admission (most recent first). Any auth role.
