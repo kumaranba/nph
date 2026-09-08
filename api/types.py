@@ -178,6 +178,27 @@ class AdmissionType:
         from .billing import BillingService
         return BillingService.total_pending_dues(self)
 
+    # A guide for the payment form: DRUGS charges dated within the admission's
+    # still-unpaid invoice periods — roughly what's owed for medication, to
+    # collect into the Pharmacy account. Approximate (a partly-paid period may
+    # have already covered some of it).
+    @strawberry.field
+    def outstanding_drug_charges(self) -> Decimal:
+        from .models import AdditionalCharge, ChargeCategory, InvoiceStatus
+        total = Decimal('0')
+        for inv in self.invoices.filter(
+            status__in=[InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL]
+        ):
+            total += (
+                AdditionalCharge.objects.filter(
+                    admission=self, category=ChargeCategory.DRUGS,
+                    charge_date__gte=inv.billing_period_start,
+                    charge_date__lte=inv.billing_period_end,
+                ).aggregate(t=Sum('amount'))['t']
+                or Decimal('0')
+            )
+        return total
+
     # Default effective date for a fee change (next not-yet-invoiced cycle).
     @strawberry.field
     def next_fee_cycle_date(self) -> date:
