@@ -27,6 +27,7 @@ type Threshold = {
 type SettingsResult = {
   systemSettings: {
     feeDueWarningDays: number;
+    maxInpatientDays: number;
     vitalsThresholds: Threshold[];
   };
 };
@@ -57,6 +58,7 @@ export default function SettingsPage() {
   const isAdmin = role === "ADMIN";
 
   const [feeDays, setFeeDays] = useState("");
+  const [maxDays, setMaxDays] = useState("");
   const [edits, setEdits] = useState<Record<string, ThresholdEdit>>({});
   const [saved, setSaved] = useState(false);
 
@@ -73,6 +75,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!settingsData) return;
     setFeeDays(String(settingsData.systemSettings.feeDueWarningDays));
+    setMaxDays(String(settingsData.systemSettings.maxInpatientDays));
     const byType = Object.fromEntries(
       settingsData.systemSettings.vitalsThresholds.map((t) => [t.vitalType, t])
     );
@@ -108,6 +111,7 @@ export default function SettingsPage() {
     updateSettings({
       variables: {
         feeDueWarningDays: feeDays === "" ? null : Number(feeDays),
+        maxInpatientDays: maxDays === "" ? null : Number(maxDays),
         thresholds,
       },
     });
@@ -158,18 +162,38 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="max-w-xs space-y-1.5">
-                <Label htmlFor="feeDays">Fee due warning days</Label>
-                <Input
-                  id="feeDays"
-                  type="number"
-                  min={0}
-                  value={feeDays}
-                  onChange={(e) => {
-                    setSaved(false);
-                    setFeeDays(e.target.value);
-                  }}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="feeDays">Fee due warning days</Label>
+                  <Input
+                    id="feeDays"
+                    type="number"
+                    min={0}
+                    value={feeDays}
+                    onChange={(e) => {
+                      setSaved(false);
+                      setFeeDays(e.target.value);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="maxDays">Max inpatient days</Label>
+                  <Input
+                    id="maxDays"
+                    type="number"
+                    min={0}
+                    value={maxDays}
+                    onChange={(e) => {
+                      setSaved(false);
+                      setMaxDays(e.target.value);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    After this many days a patient must be discharged and
+                    re-admitted. The dashboard reminds you a month ahead. 0 = no
+                    limit.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

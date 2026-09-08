@@ -262,12 +262,15 @@ class VitalsThresholdInput:
 class SystemSettingsType:
     """Editable, runtime-configurable app settings."""
     fee_due_warning_days: int
+    max_inpatient_days: int
     vitals_thresholds: List[VitalsThresholdType]
 
 
 def _system_settings() -> SystemSettingsType:
+    setting = SystemSetting.load()
     return SystemSettingsType(
-        fee_due_warning_days=SystemSetting.load().fee_due_warning_days,
+        fee_due_warning_days=setting.fee_due_warning_days,
+        max_inpatient_days=setting.max_inpatient_days,
         vitals_thresholds=list(VitalsThreshold.objects.order_by('vital_type')),
     )
 
@@ -1145,6 +1148,15 @@ class DashboardStats:
 
 
 @strawberry.type
+class ForceDischargeItem:
+    """An active admission approaching (or past) the max-inpatient-days limit,
+    for the force-discharge reminder list."""
+    admission: 'AdmissionType'
+    force_discharge_date: date
+    days_remaining: int      # negative when already past the limit
+
+
+@strawberry.type
 class MonthlyTotal:
     month: str
     total: Decimal
@@ -1961,6 +1973,35 @@ class Query:
             .select_related('admission__patient', 'admission__bed__room')
             .order_by('start_date', 'id')
         )
+
+    # Active admissions within 30 days of (or past) the max-inpatient-days limit
+    # — the "force discharge soon" reminder list. Empty when the limit is 0
+    # (disabled). The clock is admission_date-based; permission doesn't pause it.
+    # Ordered soonest-first (overdue at the top). Any authenticated role.
+    @strawberry.field
+    @login_required
+    def force_discharge_due_list(self, info: Info) -> List[ForceDischargeItem]:
+        max_days = SystemSetting.load().max_inpatient_days
+        if max_days <= 0:
+            return []
+        today = _today()
+        # Include admissions whose limit date falls on/before today + 30 days.
+        cutoff = today + timedelta(days=30) - timedelta(days=max_days)
+        qs = (
+            Admission.objects.filter(
+                status=AdmissionStatus.ACTIVE, admission_date__lte=cutoff
+            )
+            .select_related('patient', 'bed__room')
+            .order_by('admission_date', 'id')
+        )
+        items = []
+        for adm in qs:
+            fdd = adm.admission_date + timedelta(days=max_days)
+            items.append(ForceDischargeItem(
+                admission=adm, force_discharge_date=fdd,
+                days_remaining=(fdd - today).days,
+            ))
+        return items
 
     # Permission history for one admission (most recent first). Any auth role.
     @strawberry.field
@@ -2927,14 +2968,20 @@ class Mutation:
         self,
         info: Info,
         fee_due_warning_days: Optional[int] = None,
+        max_inpatient_days: Optional[int] = None,
         thresholds: Optional[List[VitalsThresholdInput]] = None,
     ) -> SystemSettingsType:
         with transaction.atomic():
-            if fee_due_warning_days is not None:
-                if fee_due_warning_days < 0:
-                    raise GraphQLError('feeDueWarningDays must be non-negative.')
+            if fee_due_warning_days is not None or max_inpatient_days is not None:
                 setting = SystemSetting.load()
-                setting.fee_due_warning_days = fee_due_warning_days
+                if fee_due_warning_days is not None:
+                    if fee_due_warning_days < 0:
+                        raise GraphQLError('feeDueWarningDays must be non-negative.')
+                    setting.fee_due_warning_days = fee_due_warning_days
+                if max_inpatient_days is not None:
+                    if max_inpatient_days < 0:
+                        raise GraphQLError('maxInpatientDays must be non-negative.')
+                    setting.max_inpatient_days = max_inpatient_days
                 setting.save()
 
             for threshold in thresholds or []:

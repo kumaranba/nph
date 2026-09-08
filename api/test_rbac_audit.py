@@ -109,6 +109,11 @@ OPERATIONS = [
     ("flaggedVitals", "{ flaggedVitals { id } }", {"ADMIN", "NURSE"}),
     # --- Dashboard queries ------------------------------------------------
     ("patientsOnPermission", "{ patientsOnPermission { id } }", ALL),
+    (
+        "forceDischargeDueList",
+        "{ forceDischargeDueList { daysRemaining } }",
+        ALL,
+    ),
     ("permissions", '{ permissions(admissionId: "1") { id } }', ALL),
     ("dashboardStats", "{ dashboardStats { bedsTotal } }", ALL),
     ("recentAdmissions", "{ recentAdmissions { id } }", ALL),
