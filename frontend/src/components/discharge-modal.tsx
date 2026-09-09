@@ -275,12 +275,28 @@ export function DischargeModal({
                             </span>
                           </div>
                         ))}
-                        <div className="flex justify-between gap-3 bg-muted/40 px-3 py-2.5 font-semibold">
+                        <div className="flex justify-between gap-3 bg-muted/40 px-3 py-2 font-medium">
                           <span>Balance to settle</span>
                           <span className="tabular-nums">
                             {rupee(pv.totalDueNow)}
                           </span>
                         </div>
+                        {waiver > 0 ? (
+                          <>
+                            <div className="flex justify-between gap-3 px-3 py-1.5 text-sm text-amber-700">
+                              <span>Less waiver</span>
+                              <span className="tabular-nums">
+                                −{rupee(Math.min(waiver, totalDue))}
+                              </span>
+                            </div>
+                            <div className="flex justify-between gap-3 bg-muted/40 px-3 py-2.5 font-semibold">
+                              <span>Net to collect</span>
+                              <span className="tabular-nums">
+                                {rupee(Math.max(0, totalDue - waiver))}
+                              </span>
+                            </div>
+                          </>
+                        ) : null}
                       </div>
                     )}
                   </div>

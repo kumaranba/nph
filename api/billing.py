@@ -634,6 +634,11 @@ class BillingService:
         snapshot, so re-running yields the same result. Returns the cancelled
         amount.
         """
+        # Cancel the fee on any monthly invoice for a period that starts AFTER
+        # the discharge date — the patient wasn't present. This matters for a
+        # back-dated discharge where billing already raised later months.
+        cls._cancel_post_discharge_fees(admission, discharge_date)
+
         inv = cls.current_cycle_invoice(admission, discharge_date)
         if inv is None:      # not billed for this cycle — nothing to pro-rate
             return Decimal("0")
@@ -652,6 +657,24 @@ class BillingService:
         inv.save(update_fields=["base_fee", "total_due"])
         cls.recompute_status(inv)
         return cancelled
+
+    @classmethod
+    def _cancel_post_discharge_fees(cls, admission, discharge_date: date) -> None:
+        """Zero the fee on monthly invoices whose period starts after the
+        discharge date (the patient wasn't present for them). Charges in the
+        period, if any, remain; any resulting overpayment is released to credit.
+        Opening-balance and settlement invoices are left alone."""
+        later = admission.invoices.filter(
+            billing_period_start__gt=discharge_date,
+            is_opening_balance=False, is_settlement=False,
+        )
+        for invoice in later:
+            if invoice.base_fee == 0:
+                continue
+            invoice.base_fee = Decimal("0")
+            invoice.save(update_fields=["base_fee"])
+            cls.recompute_invoice_total(invoice)   # total = 0 + period charges
+            cls._release_overpayment_to_credit(invoice)
 
 
 # ------------------------------------------------------- discharge preview
@@ -735,6 +758,30 @@ def build_discharge_preview(admission, discharge_date: date) -> DischargePreview
                 and inv.billing_period_end == cur_end
                 and not inv.is_opening_balance and not inv.is_settlement):
             continue  # already handled above as the current cycle
+        # A monthly invoice for a period that starts after the discharge date:
+        # the patient wasn't present, so the fee isn't owed — only any unpaid
+        # charges in that period count. (Back-dated discharge across a cycle.)
+        if (not inv.is_opening_balance and not inv.is_settlement
+                and inv.billing_period_start > discharge_date):
+            charges = BillingService._period_charges(
+                admission, inv.billing_period_start, inv.billing_period_end)
+            if charges > 0:
+                paid = (
+                    BillingService.amount_paid(inv)
+                    + (inv.refund_amount or Decimal("0"))
+                    + (inv.waived_amount or Decimal("0"))
+                )
+                charge_bal = max(Decimal("0"), charges - paid)
+                for ch in AdditionalCharge.objects.filter(
+                    admission=admission,
+                    charge_date__gte=inv.billing_period_start,
+                    charge_date__lte=inv.billing_period_end,
+                ).order_by("charge_date"):
+                    pv.lines.append(DischargeLine(
+                        f"{ch.get_category_display()} {ch.charge_date:%d-%m-%Y}",
+                        "charge", ch.amount))
+                pv.charges_due += charge_bal
+            continue
         bal = BillingService.balance_due(inv)
         if bal <= 0:
             continue
