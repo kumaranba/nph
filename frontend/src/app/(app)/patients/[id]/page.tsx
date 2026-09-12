@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@apollo/client";
+import { useMutation, useQuery } from "@apollo/client";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -30,7 +30,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getAccessToken } from "@/lib/auth";
-import { ME, PATIENT } from "@/lib/graphql/operations";
+import {
+  CREATE_READMISSION_INQUIRY,
+  ME,
+  PATIENT,
+} from "@/lib/graphql/operations";
 
 type Admission = {
   id: string;
@@ -94,6 +98,12 @@ export default function PatientProfilePage() {
     skip: !hasToken,
   });
   const { data: meData } = useQuery<MeResult>(ME, { skip: !hasToken });
+
+  const [willingReadmit, { loading: creatingReadmit, error: readmitError }] =
+    useMutation(CREATE_READMISSION_INQUIRY, {
+      onCompleted: () => router.push("/inquiries"),
+      onError: () => {},
+    });
 
   if (!hasToken || loading) {
     return (
@@ -307,6 +317,33 @@ export default function PatientProfilePage() {
             >
               {patient.admissions.length > 0 ? "Re Admission" : "New Admission"}
             </Button>
+          ) : null}
+
+          {/* PRO: bring a former patient into the pipeline as a re-admission
+              lead when they're willing to come back. */}
+          {patient &&
+          canManageFollowUps &&
+          !activeAdmission &&
+          patient.admissions.length > 0 ? (
+            <div className="space-y-1">
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={creatingReadmit}
+                onClick={() =>
+                  willingReadmit({ variables: { patientId: patient.id } })
+                }
+              >
+                {creatingReadmit ? "Adding…" : "Willing to readmit"}
+              </Button>
+              {readmitError ? (
+                <p className="text-xs text-red-600">{readmitError.message}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Adds a re-admission lead to the pipeline.
+                </p>
+              )}
+            </div>
           ) : null}
         </CardContent>
       </Card>

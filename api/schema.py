@@ -90,6 +90,7 @@ class InquirySourceEnum(Enum):
     REFERRAL = 'REFERRAL'
     OP_CONSULT = 'OP_CONSULT'
     OP_IMPORT = 'OP_IMPORT'
+    READMISSION = 'READMISSION'
 
 
 @strawberry.enum
@@ -3361,6 +3362,52 @@ class Mutation:
         )
         if data.consulted_on is not None:
             _schedule_op_nudge(inquiry, data.consulted_on, user)
+        return inquiry
+
+    # Bring a former (discharged) patient into the pipeline as a re-admission
+    # lead — "Willing to readmit". Pre-fills name/phone from the patient, source
+    # Re-admission, status NEW. Rejected if the patient is currently admitted or
+    # already has an open re-admission lead. PRO only.
+    @strawberry.mutation
+    @require_roles(UserRole.PRO)
+    def create_readmission_inquiry(
+        self, info: Info, patient_id: strawberry.ID, note: Optional[str] = None,
+    ) -> InquiryType:
+        try:
+            patient = Patient.objects.get(pk=patient_id)
+        except Patient.DoesNotExist:
+            raise GraphQLError('Patient not found.')
+        if patient.admissions.filter(status=AdmissionStatus.ACTIVE).exists():
+            raise GraphQLError('Patient is currently admitted.')
+
+        phone = (patient.guardian_phone or '').strip()
+        # Guard against a duplicate open re-admission lead for the same person.
+        open_dupes = Inquiry.objects.filter(
+            source=InquirySource.READMISSION,
+        ).exclude(status__in=[InquiryStatus.ADMITTED, InquiryStatus.LOST])
+        if phone:
+            open_dupes = open_dupes.filter(phone=phone)
+        else:
+            open_dupes = open_dupes.filter(name__iexact=patient.name)
+        if open_dupes.exists():
+            raise GraphQLError('This patient already has an open re-admission lead.')
+
+        user = info.context.request.user
+        default_note = f'Re-admission — former patient {patient.patient_id}'
+        note = (note or '').strip()
+        inquiry = Inquiry.objects.create(
+            name=patient.name,
+            phone=phone,
+            source=InquirySource.READMISSION,
+            notes=f'{default_note}\n{note}'.strip() if note else default_note,
+            status=InquiryStatus.NEW,
+            assigned_to=user,
+            created_by=user,
+        )
+        _log_activity(
+            ActivityKind.SYSTEM, 'Willing to readmit — added to pipeline',
+            inquiry=inquiry, patient=patient, user=user,
+        )
         return inquiry
 
     # Edit a lead's core details (name, phone, notes, source). Partial — only

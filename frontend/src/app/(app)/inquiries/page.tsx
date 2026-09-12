@@ -64,6 +64,7 @@ const SOURCE_LABEL: Record<string, string> = {
   REFERRAL: "Referral",
   OP_CONSULT: "OP consult",
   OP_IMPORT: "OP list",
+  READMISSION: "Re-admission",
 };
 
 // Pipeline stages (the backend field is `status`).
