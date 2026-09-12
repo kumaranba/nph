@@ -46,6 +46,7 @@ const SOURCE_LABEL: Record<string, string> = {
   REFERRAL: "Referral",
   OP_CONSULT: "OP consult",
   OP_IMPORT: "OP list",
+  READMISSION: "Re-admission",
 };
 const STAGE_LABEL: Record<string, string> = {
   NEW: "New",

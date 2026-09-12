@@ -910,6 +910,15 @@ export const CREATE_INQUIRY = gql`
   }
 `;
 
+// Bring a discharged patient into the pipeline as a re-admission lead.
+export const CREATE_READMISSION_INQUIRY = gql`
+  mutation CreateReadmissionInquiry($patientId: ID!, $note: String) {
+    createReadmissionInquiry(patientId: $patientId, note: $note) {
+      id
+    }
+  }
+`;
+
 export const UPDATE_INQUIRY = gql`
   mutation UpdateInquiry(
     $id: ID!

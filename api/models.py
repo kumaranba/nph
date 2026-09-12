@@ -677,6 +677,7 @@ class InquirySource(models.TextChoices):
     REFERRAL = 'REFERRAL', 'Referral'
     OP_CONSULT = 'OP_CONSULT', 'OP consult'
     OP_IMPORT = 'OP_IMPORT', 'OP list import'
+    READMISSION = 'READMISSION', 'Re-admission'
 
 
 class InquiryStatus(models.TextChoices):

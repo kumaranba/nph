@@ -234,6 +234,11 @@ OPERATIONS = [
         {"PRO"},
     ),
     (
+        "createReadmissionInquiry",
+        'mutation { createReadmissionInquiry(patientId: "999999") { id } }',
+        {"PRO"},
+    ),
+    (
         "updateInquiryStatus",
         'mutation { updateInquiryStatus(inquiryId: "999999", status: CONTACTED) { id } }',
         {"PRO"},

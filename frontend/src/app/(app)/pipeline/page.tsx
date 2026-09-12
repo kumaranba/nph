@@ -39,6 +39,7 @@ const SOURCE_LABEL: Record<string, string> = {
   REFERRAL: "Referral",
   OP_CONSULT: "OP consult",
   OP_IMPORT: "OP list",
+  READMISSION: "Re-admission",
 };
 
 const LOST_REASONS: Array<{ value: string; label: string }> = [
