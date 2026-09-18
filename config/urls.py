@@ -16,6 +16,7 @@ from api.views import (
     patient_food_report_pdf_view,
     patient_photo_upload_view,
     receipt_pdf_view,
+    site_image_upload_view,
 )
 
 urlpatterns = [
@@ -41,6 +42,8 @@ urlpatterns = [
          csrf_exempt(patient_aadhar_scan_upload_view)),
     # OP-list bulk import → inquiries (multipart CSV/.xlsx). Bearer-auth, PRO.
     path('inquiries/import', csrf_exempt(op_list_import_view)),
+    # Website image upload (multipart). Bearer-auth, ADMIN.
+    path('site/images', csrf_exempt(site_image_upload_view)),
 ]
 
 # Serve uploaded media from MEDIA_ROOT in development. In production, the web
