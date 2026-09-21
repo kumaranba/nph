@@ -19,6 +19,27 @@ export const ME = gql`
   }
 `;
 
+// Public landing-page content (no auth). Only active rows are returned.
+export const GALLERY_IMAGES = gql`
+  query GalleryImages {
+    galleryImages {
+      id
+      imageUrl
+      titleEn
+      titleTa
+    }
+  }
+`;
+
+export const SITE_LOGO = gql`
+  query SiteLogo {
+    siteLogo {
+      id
+      imageUrl
+    }
+  }
+`;
+
 export const SEARCH_PATIENTS = gql`
   query SearchPatients($query: String!) {
     searchPatients(query: $query) {
