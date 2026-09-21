@@ -1047,3 +1047,39 @@ class StaffMealRate(models.Model):
             .order_by('-effective_from', '-id')
             .first()
         )
+
+
+# ---------------------------------------------------------------------------
+# Website content (public landing page)
+# ---------------------------------------------------------------------------
+class SiteImage(models.Model):
+    """An image shown on the public website (landing page).
+
+    Managed by ADMIN through the Django admin (and, later, an in-app screen).
+    Reads are public — the landing page renders active rows — so only display
+    fields live here, never anything sensitive. Files are stored on the
+    app-server filesystem (MEDIA_ROOT), served from MEDIA_URL, matching the
+    patient-photo pattern; add/remove a photo is create/delete a row (or untick
+    ``is_active`` to hide it without deleting).
+    """
+
+    class Section(models.TextChoices):
+        GALLERY = 'GALLERY', 'Gallery carousel'
+        LOGO = 'LOGO', 'Site logo'
+        FOCUS = 'FOCUS', 'Care-area image'
+
+    section = models.CharField(max_length=16, choices=Section.choices)
+    image = models.ImageField(upload_to='site_images/')
+    # Bilingual caption/title (English + Tamil) shown over gallery slides.
+    title_en = models.CharField(max_length=120, blank=True)
+    title_ta = models.CharField(max_length=120, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['section', 'sort_order', 'id']
+
+    def __str__(self):
+        label = self.title_en or self.image.name or 'image'
+        return f'SiteImage[{self.section}] {label}'

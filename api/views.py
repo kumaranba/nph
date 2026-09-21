@@ -3,14 +3,16 @@ from datetime import datetime
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from django.core.files.base import ContentFile
 from django.http import HttpResponse, JsonResponse
+from PIL import Image
 from strawberry.django.views import GraphQLView
 
 from .auth import get_user_from_request
 from .canteen import build_canteen_report
 from .food_report import build_food_vendor_list, build_patient_food_report
 from .inquiry_import import ImportFileError, import_op_list
-from .models import Patient, PaymentReceipt, UserRole
+from .models import Patient, PaymentReceipt, SiteImage, UserRole
 from .reports import (
     account_statement_pdf,
     canteen_report_pdf,
@@ -170,6 +172,94 @@ def patient_photo_upload_view(request, patient_id):
 def patient_aadhar_scan_upload_view(request, patient_id):
     """Upload/replace a patient's Aadhar scan (image or PDF). ADMIN."""
     return _upload_patient_file(request, patient_id, "aadhar_scan", _SCAN_TYPES)
+
+
+# ---------------------------------------------------------------------------
+# Website images (public landing page) — ADMIN upload
+# ---------------------------------------------------------------------------
+
+# Only broadly browser-renderable formats (no HEIC/HEIF) — these go on a public
+# page and are re-encoded by Pillow below.
+_SITE_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+# Cap the longest side so phone photos don't ship multi-MB images to visitors.
+_SITE_IMAGE_MAX_PX = 1600
+
+
+def _process_site_image(upload):
+    """Downscale an uploaded image so its longest side is <= _SITE_IMAGE_MAX_PX
+    and re-encode it to keep the file small. Returns ``(file, filename)`` ready
+    for ``ImageField.save``. If Pillow can't read the upload, the original bytes
+    are returned unchanged."""
+    try:
+        img = Image.open(upload)
+        img.load()
+    except Exception:
+        upload.seek(0)
+        return upload, upload.name
+
+    fmt = (img.format or "JPEG").upper()
+    if fmt not in ("JPEG", "PNG", "WEBP"):
+        fmt = "JPEG"
+
+    longest = max(img.size)
+    if longest > _SITE_IMAGE_MAX_PX:
+        ratio = _SITE_IMAGE_MAX_PX / longest
+        img = img.resize(
+            (round(img.size[0] * ratio), round(img.size[1] * ratio)),
+            Image.LANCZOS,
+        )
+    if fmt == "JPEG" and img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    save_kwargs = {"optimize": True}
+    if fmt == "JPEG":
+        save_kwargs["quality"] = 85
+    img.save(buf, format=fmt, **save_kwargs)
+    buf.seek(0)
+
+    ext = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}[fmt]
+    base = (upload.name or "image").rsplit(".", 1)[0] or "image"
+    return ContentFile(buf.getvalue()), f"{base}.{ext}"
+
+
+def site_image_upload_view(request):
+    """Create a ``SiteImage`` from a multipart upload. ADMIN only. Bearer-auth.
+
+    multipart fields: ``file`` (image), ``section`` (defaults to GALLERY),
+    ``title_en``, ``title_ta``. Returns ``{id, url, section}``.
+    """
+    user = get_user_from_request(request)
+    if user is None:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    if user.role != UserRole.ADMIN:
+        return JsonResponse({"error": "Permission denied."}, status=403)
+
+    upload = request.FILES.get("file")
+    if upload is None:
+        return JsonResponse({"error": "No file uploaded (field 'file')."}, status=400)
+    if upload.size > settings.MAX_UPLOAD_BYTES:
+        return JsonResponse({"error": "File is too large."}, status=413)
+    if upload.content_type not in _SITE_IMAGE_TYPES:
+        return JsonResponse(
+            {"error": f"Unsupported file type: {upload.content_type}."}, status=415
+        )
+
+    section = request.POST.get("section") or SiteImage.Section.GALLERY
+    if section not in SiteImage.Section.values:
+        return JsonResponse({"error": f"Unknown section: {section}."}, status=400)
+
+    image = SiteImage(
+        section=section,
+        title_en=request.POST.get("title_en", ""),
+        title_ta=request.POST.get("title_ta", ""),
+    )
+    content, filename = _process_site_image(upload)
+    image.image.save(filename, content, save=False)
+    image.save()
+    return JsonResponse(
+        {"id": image.id, "url": image.image.url, "section": image.section}
+    )
 
 
 def _food_auth(request):

@@ -1,8 +1,10 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.utils.html import format_html
 from .models import (
     User, Room, Bed, Patient, Admission,
     Invoice, Payment, AdditionalCharge, VitalReading, VitalsThreshold,
+    SiteImage,
 )
 
 
@@ -112,3 +114,23 @@ class VitalReadingAdmin(admin.ModelAdmin):
 @admin.register(VitalsThreshold)
 class VitalsThresholdAdmin(admin.ModelAdmin):
     list_display = ('vital_type', 'below_threshold', 'above_threshold')
+
+
+@admin.register(SiteImage)
+class SiteImageAdmin(admin.ModelAdmin):
+    """Manage public website images. ADMIN uploads here; add/remove a photo is
+    add/delete a row, and ``is_active``/``sort_order`` are editable inline."""
+    list_display = ('preview', 'section', 'title_en', 'sort_order', 'is_active', 'created_at')
+    list_display_links = ('title_en',)
+    list_editable = ('section', 'sort_order', 'is_active')
+    list_filter = ('section', 'is_active')
+    readonly_fields = ('preview', 'created_at')
+
+    @admin.display(description='Preview')
+    def preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="height:48px;border-radius:6px;object-fit:cover" />',
+                obj.image.url,
+            )
+        return '—'
