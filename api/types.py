@@ -467,3 +467,21 @@ class FollowUpType:
     @strawberry.field
     def subject_name(self) -> str:
         return self.subject_name
+
+
+@strawberry_django.type(models.SiteImage)
+class SiteImageType:
+    """A public-website image (gallery slide, logo, care-area photo). Only
+    display fields are exposed — the gallery/logo reads are unauthenticated."""
+    id: auto
+    section: auto
+    title_en: auto
+    title_ta: auto
+    sort_order: auto
+    is_active: auto
+    created_at: auto
+
+    # Image URL served from MEDIA, or None if the file is missing.
+    @strawberry.field
+    def image_url(self) -> Optional[str]:
+        return self.image.url if self.image else None

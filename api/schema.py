@@ -29,6 +29,7 @@ from .models import (
     InquiryStatus, LostReason, Invoice,
     InvoiceStatus, Patient, Payment, PaymentAccount, PaymentReceipt,
     Permission, Referrer, ReferrerKind, Room,
+    SiteImage,
     Staff, StaffDesignation, StaffMealRate, SystemSetting, Tag, TagCategory,
     User, UserRole, VitalReading, VitalsThreshold, Waiver,
 )
@@ -37,7 +38,7 @@ from .types import (
     ActivityType, AdditionalChargeType, AdmissionType, AttendanceType, BedType,
     FeeType, FollowUpType, FoodRateType, InquiryType, InvoiceType, PatientType,
     PaymentAccountType, PaymentReceiptType, PaymentType, PermissionType,
-    ReferrerType, RoomType,
+    ReferrerType, RoomType, SiteImageType,
     StaffMealRateType, StaffType, TagType, UserType, VitalReadingType,
     VitalsThresholdType,
 )
@@ -2284,6 +2285,42 @@ class Query:
             for i in dashboard.activity_items(max(1, min(limit, 50)))
         ]
 
+    # --- Website content ---------------------------------------------------
+    # PUBLIC (no auth): the landing page renders these. Only active rows, and
+    # SiteImageType exposes nothing sensitive.
+    @strawberry.field
+    def gallery_images(self) -> List[SiteImageType]:
+        """Active gallery-carousel images, in display order."""
+        return SiteImage.objects.filter(
+            section=SiteImage.Section.GALLERY, is_active=True
+        )
+
+    @strawberry.field
+    def site_logo(self) -> Optional[SiteImageType]:
+        """The current site logo (most recently added active LOGO row), or None."""
+        return (
+            SiteImage.objects.filter(
+                section=SiteImage.Section.LOGO, is_active=True
+            )
+            .order_by('-created_at', '-id')
+            .first()
+        )
+
+    # ADMIN management list: every image (incl. inactive), optionally filtered
+    # by section. Uploads happen over REST (POST /site/images); this drives the
+    # management screen.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN)
+    def site_images(
+        self, info: Info, section: Optional[str] = None
+    ) -> List[SiteImageType]:
+        qs = SiteImage.objects.all()
+        if section is not None:
+            if section not in SiteImage.Section.values:
+                raise GraphQLError(f'Unknown section: {section}.')
+            qs = qs.filter(section=section)
+        return qs
+
 
 # ---------------------------------------------------------------------------
 # Mutation
@@ -3909,6 +3946,79 @@ class Mutation:
                 user=info.context.request.user,
             )
         return follow_up
+
+    # --- Website content (ADMIN) -------------------------------------------
+    # Uploads create rows over REST (POST /site/images); these edit the
+    # metadata, reorder, and remove. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def update_site_image(
+        self,
+        info: Info,
+        image_id: strawberry.ID,
+        title_en: Optional[str] = None,
+        title_ta: Optional[str] = None,
+        sort_order: Optional[int] = None,
+        is_active: Optional[bool] = None,
+        section: Optional[str] = None,
+    ) -> SiteImageType:
+        try:
+            image = SiteImage.objects.get(pk=image_id)
+        except SiteImage.DoesNotExist:
+            raise GraphQLError('Image not found.')
+        fields = []
+        if title_en is not None:
+            image.title_en = title_en
+            fields.append('title_en')
+        if title_ta is not None:
+            image.title_ta = title_ta
+            fields.append('title_ta')
+        if sort_order is not None:
+            image.sort_order = max(0, sort_order)
+            fields.append('sort_order')
+        if is_active is not None:
+            image.is_active = is_active
+            fields.append('is_active')
+        if section is not None:
+            if section not in SiteImage.Section.values:
+                raise GraphQLError(f'Unknown section: {section}.')
+            image.section = section
+            fields.append('section')
+        if fields:
+            image.save(update_fields=fields)
+        return image
+
+    # Set display order from a list of ids (first id → sort_order 0, and so on).
+    # Ids not present are left untouched. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def reorder_site_images(
+        self, info: Info, image_ids: List[strawberry.ID]
+    ) -> List[SiteImageType]:
+        by_id = {str(img.id): img for img in SiteImage.objects.filter(pk__in=image_ids)}
+        updated = []
+        with transaction.atomic():
+            for order, image_id in enumerate(image_ids):
+                image = by_id.get(str(image_id))
+                if image is None:
+                    raise GraphQLError(f'Image not found: {image_id}.')
+                if image.sort_order != order:
+                    image.sort_order = order
+                    image.save(update_fields=['sort_order'])
+                updated.append(image)
+        return updated
+
+    # Permanently remove an image and its file. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def delete_site_image(self, info: Info, image_id: strawberry.ID) -> bool:
+        try:
+            image = SiteImage.objects.get(pk=image_id)
+        except SiteImage.DoesNotExist:
+            raise GraphQLError('Image not found.')
+        image.image.delete(save=False)  # remove the file from MEDIA
+        image.delete()
+        return True
 
 
 schema = strawberry.Schema(
