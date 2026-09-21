@@ -366,6 +366,7 @@ class InquiryType:
     lost_reason_note: auto
     contact_consent: auto
     do_not_contact: auto
+    pickup_requested: auto
     consulted_on: auto
     notes: auto
     assigned_to: Optional[UserType]
@@ -458,6 +459,7 @@ class FollowUpType:
     note: auto
     follow_up_date: auto
     is_done: auto
+    completed_on: auto
     created_by: Optional[UserType]
     created_at: auto
 

@@ -45,7 +45,7 @@ export function AppSidebar() {
         <div className="min-w-0 leading-tight">
           <div className="truncate text-sm font-semibold">Nila Psychiatric</div>
           <div className="text-[11.5px] font-medium text-muted-foreground">
-            Hospital · Kochi
+            Hospital · Thanjavur
           </div>
         </div>
       </div>

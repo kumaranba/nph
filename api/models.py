@@ -754,6 +754,8 @@ class Inquiry(models.Model):
         default=ConsentStatus.UNKNOWN,
     )
     do_not_contact = models.BooleanField(default=False)
+    # The family asked for the patient to be picked up (ambulance / vehicle).
+    pickup_requested = models.BooleanField(default=False)
     # Set only when status is LOST — why the lead didn't convert.
     lost_reason = models.CharField(
         max_length=12, choices=LostReason.choices, blank=True
@@ -820,6 +822,10 @@ class FollowUp(models.Model):
     note = models.TextField(blank=True)
     follow_up_date = models.DateField()
     is_done = models.BooleanField(default=False)
+    # The date the follow-up was actually completed (set when marked done).
+    # Null for still-open follow-ups and for ones completed before this was
+    # tracked.
+    completed_on = models.DateField(null=True, blank=True)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name='created_follow_ups',
         null=True, blank=True,

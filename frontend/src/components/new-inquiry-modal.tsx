@@ -15,6 +15,7 @@ type InquiryForm = {
   phone: string;
   notes: string;
   consultedOn: string;
+  pickupRequested: boolean;
 };
 
 const SOURCES: Array<{ value: string; label: string }> = [
@@ -35,12 +36,15 @@ export function NewInquiryModal({ onClose }: { onClose: () => void }) {
       phone: "",
       notes: "",
       consultedOn: "",
+      pickupRequested: false,
     },
   });
   const source = watch("source");
 
   const [create, { loading, error }] = useMutation(CREATE_INQUIRY, {
-    refetchQueries: [{ query: INQUIRIES, variables: { status: null, search: null } }],
+    refetchQueries: [
+      { query: INQUIRIES, variables: { status: null, search: null, pickupRequested: null } },
+    ],
     onCompleted: onClose,
     onError: () => {},
   });
@@ -62,6 +66,7 @@ export function NewInquiryModal({ onClose }: { onClose: () => void }) {
           phone: values.phone,
           notes: values.notes,
           consultedOn: values.consultedOn || null,
+          pickupRequested: values.pickupRequested,
         },
       },
     });
@@ -135,6 +140,11 @@ export function NewInquiryModal({ onClose }: { onClose: () => void }) {
               {...register("notes")}
             />
           </div>
+
+          <label htmlFor="iq-pickup" className="flex items-center gap-2 text-sm">
+            <input id="iq-pickup" type="checkbox" className="h-4 w-4" {...register("pickupRequested")} />
+            Pick up requested
+          </label>
 
           {error ? <p className="text-sm text-red-600">{error.message}</p> : null}
 

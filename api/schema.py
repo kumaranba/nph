@@ -7,6 +7,7 @@ from typing import List, Optional
 import strawberry
 from django.db import transaction
 from django.db.models import Count, Q, Sum
+from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from graphql import GraphQLError
 from strawberry.types import Info
@@ -379,6 +380,7 @@ class CreateInquiryInput:
     notes: Optional[str] = ""
     consulted_on: Optional[date] = None
     referrer_id: Optional[strawberry.ID] = None
+    pickup_requested: Optional[bool] = False
 
 
 @strawberry.input
@@ -625,6 +627,13 @@ class DischargedPatientItem:
     discharge_type: str
     room: Optional[str]
     tags: List[str]
+
+
+@strawberry.type
+class DischargedMonthCount:
+    """Discharges in one calendar month, for the discharged-list summary."""
+    month: str      # 'YYYY-MM'
+    count: int
 
 
 @strawberry.type
@@ -1680,16 +1689,35 @@ class Query:
     @strawberry.field
     @require_roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.PRO)
     def discharged_list(
-        self, info: Info, tag: Optional[str] = None, sort_desc: bool = True
+        self,
+        info: Info,
+        tag: Optional[str] = None,
+        search: Optional[str] = None,
+        discharged_from: Optional[date] = None,
+        discharged_to: Optional[date] = None,
+        sort_desc: bool = True,
     ) -> List[DischargedPatientItem]:
         qs = (
             Admission.objects.filter(status=AdmissionStatus.DISCHARGED)
+            # Drop admissions whose patient has since been re-admitted (has a
+            # current ACTIVE admission) — they belong in the active list, not here.
+            .exclude(patient__admissions__status=AdmissionStatus.ACTIVE)
             .select_related('patient', 'bed__room')
             .prefetch_related('patient__tags')
         )
         term = (tag or '').strip().lower()
         if term:
             qs = qs.filter(patient__tags__name=term).distinct()
+        name = (search or '').strip()
+        if name:
+            qs = qs.filter(
+                Q(patient__name__icontains=name)
+                | Q(patient__patient_id__icontains=name)
+            )
+        if discharged_from is not None:
+            qs = qs.filter(discharge_date__gte=discharged_from)
+        if discharged_to is not None:
+            qs = qs.filter(discharge_date__lte=discharged_to)
         order = '-discharge_date' if sort_desc else 'discharge_date'
         qs = qs.order_by(order, '-id')
 
@@ -1712,6 +1740,28 @@ class Query:
             )
         return items
 
+    # Month-by-month discharged counts for the discharged-list summary. Counts
+    # the same population the list shows (excludes patients since re-admitted),
+    # newest month first. Independent of the list's search / date filters.
+    # ADMIN + FINANCE + PRO.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.FINANCE, UserRole.PRO)
+    def discharged_monthly_summary(self, info: Info) -> List[DischargedMonthCount]:
+        rows = (
+            Admission.objects.filter(
+                status=AdmissionStatus.DISCHARGED, discharge_date__isnull=False
+            )
+            .exclude(patient__admissions__status=AdmissionStatus.ACTIVE)
+            .annotate(m=TruncMonth('discharge_date'))
+            .values('m')
+            .annotate(c=Count('id'))
+            .order_by('-m')
+        )
+        return [
+            DischargedMonthCount(month=r['m'].strftime('%Y-%m'), count=r['c'])
+            for r in rows
+        ]
+
     # --- PRM: inquiries (PRO manages, ADMIN views) -------------------------
     # Inquiries, newest first, optionally filtered by status and/or a
     # case-insensitive substring of name or phone. PRO + ADMIN.
@@ -1722,6 +1772,7 @@ class Query:
         info: Info,
         status: Optional[InquiryStatusEnum] = None,
         search: Optional[str] = None,
+        pickup_requested: Optional[bool] = None,
     ) -> List[InquiryType]:
         qs = Inquiry.objects.select_related(
             'patient', 'created_by', 'assigned_to', 'referrer'
@@ -1731,6 +1782,9 @@ class Query:
         term = (search or '').strip()
         if term:
             qs = qs.filter(Q(name__icontains=term) | Q(phone__icontains=term))
+        # A toggle: when on, show only leads needing a pickup.
+        if pickup_requested:
+            qs = qs.filter(pickup_requested=True)
         return qs.order_by('-created_at', '-id')
 
     # Active PRO users, for the lead-assignment picker. PRO + ADMIN.
@@ -1901,6 +1955,26 @@ class Query:
         return FollowUp.objects.filter(
             is_done=False, follow_up_date__lte=_today()
         ).count()
+
+    # Completed follow-ups, most recently completed first, optionally within a
+    # completed-on date range. Rows completed before completed_on was tracked
+    # have a null date and appear only when no range is given. PRO + ADMIN.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def completed_follow_ups(
+        self,
+        info: Info,
+        completed_from: Optional[date] = None,
+        completed_to: Optional[date] = None,
+    ) -> List[FollowUpType]:
+        qs = FollowUp.objects.filter(is_done=True).select_related(
+            'patient', 'inquiry', 'admission', 'created_by'
+        )
+        if completed_from is not None:
+            qs = qs.filter(completed_on__gte=completed_from)
+        if completed_to is not None:
+            qs = qs.filter(completed_on__lte=completed_to)
+        return qs.order_by('-completed_on', '-id')
 
     # --- ADMIN + NURSE (clinical data) -------------------------------------
     @strawberry.field
@@ -3357,6 +3431,7 @@ class Mutation:
             consulted_on=data.consulted_on,
             referrer=referrer,
             status=InquiryStatus.NEW,
+            pickup_requested=bool(data.pickup_requested),
             assigned_to=user,
             created_by=user,
         )
@@ -3823,7 +3898,8 @@ class Mutation:
             raise GraphQLError('Follow-up not found.')
         if not follow_up.is_done:
             follow_up.is_done = True
-            follow_up.save(update_fields=['is_done'])
+            follow_up.completed_on = _today()
+            follow_up.save(update_fields=['is_done', 'completed_on'])
             body = 'Follow-up completed'
             if follow_up.note:
                 body += f' — {follow_up.note}'
