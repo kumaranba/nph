@@ -1,0 +1,261 @@
+// Bilingual copy + daily timetable for the public Nila landing page.
+// Kept out of the component so the page file stays focused on structure.
+
+export type Lang = "en" | "ta";
+
+// Daily ward routine: [time, i18n key, English fallback].
+export const TIMETABLE: [string, string, string][] = [
+  ["06:00", "tt.wake", "Wake-up & freshen up"],
+  ["06:30", "tt.walk", "Morning walk / yoga"],
+  ["07:30", "tt.breakfast", "Breakfast"],
+  ["08:30", "tt.med1", "Morning medication round"],
+  ["09:30", "tt.therapy", "Therapy / counselling"],
+  ["11:00", "tt.group", "Group activity"],
+  ["13:00", "tt.lunch", "Lunch & rest"],
+  ["15:00", "tt.skills", "Recreation / skills session"],
+  ["16:30", "tt.physical", "Physical activity"],
+  ["18:00", "tt.tea", "Evening tea"],
+  ["19:00", "tt.family", "Counselling / family time"],
+  ["20:00", "tt.dinner", "Dinner"],
+  ["21:00", "tt.med2", "Night medication & wind-down"],
+  ["21:30", "tt.lights", "Lights out"],
+];
+
+// Gallery fallback slides (shown until real photos are uploaded via /admin).
+export const GALLERY_FALLBACK: { cls: string; key: string; en: string }[] = [
+  { cls: "g1", key: "g.rooms", en: "Calm inpatient rooms" },
+  { cls: "g2", key: "g.therapy", en: "Therapy & counselling" },
+  { cls: "g3", key: "g.hall", en: "Group activity hall" },
+  { cls: "g4", key: "g.garden", en: "Landscaped garden" },
+  { cls: "g5", key: "g.yoga", en: "Yoga & recreation" },
+  { cls: "g6", key: "g.family", en: "Family visiting area" },
+];
+
+export const I18N: Record<Lang, Record<string, string>> = {
+  en: {
+    "nav.focus": "Care areas",
+    "nav.services": "Services",
+    "nav.gallery": "Gallery",
+    "nav.timetable": "Day plan",
+    "nav.contact": "Contact",
+    "nav.login": "Login",
+    "hero.eyebrow": "Compassionate psychiatric care · Since 2010",
+    "hero.title": "A peaceful haven for the mind.",
+    "hero.lede":
+      "Inpatient psychiatric care, de-addiction and rehabilitation — treated with the calm, privacy and dignity every family deserves.",
+    "hero.cta1": "Book a consultation",
+    "hero.cta2": "Call",
+    "stat.years": "Years of care",
+    "stat.families": "Families helped",
+    "stat.trust": "Years trusted care",
+    "focus.eyebrow": "What we treat",
+    "focus.title": "Care areas we focus on",
+    "fa.deaddiction.t": "De-addiction",
+    "fa.deaddiction.d":
+      "Medically supervised detox and counselling for alcohol and substance recovery.",
+    "fa.mood.t": "Depression & anxiety",
+    "fa.mood.d":
+      "Assessment, therapy and medication for mood and anxiety disorders.",
+    "fa.psychosis.t": "Psychosis & schizophrenia",
+    "fa.psychosis.d":
+      "Inpatient stabilisation and long-term support with regular review.",
+    "fa.geriatric.t": "Geriatric & memory",
+    "fa.geriatric.d":
+      "Care for dementia and late-life mental health, with family guidance.",
+    "fa.counselling.t": "Stress & counselling",
+    "fa.counselling.d":
+      "Talk therapy for stress, sleep and relationship difficulties.",
+    "fa.rehab.t": "Rehabilitation",
+    "fa.rehab.d":
+      "Skills, routine and aftercare to help patients return to daily life.",
+    "services.eyebrow": "Our services",
+    "services.title": "How we care for every patient",
+    "services.sub":
+      "A full circle of clinical and human support, under one calm roof.",
+    "svc.inpatient.t": "Inpatient care",
+    "svc.inpatient.d":
+      "Safe, supervised wards with 24-hour nursing and medical review.",
+    "svc.therapy.t": "Therapy & counselling",
+    "svc.therapy.d":
+      "Individual, group and family therapy led by trained professionals.",
+    "svc.medication.t": "Medication management",
+    "svc.medication.d":
+      "The right medicine at the right time, tracked and given safely.",
+    "svc.nutrition.t": "Nutrition & wellbeing",
+    "svc.nutrition.d": "Balanced meals, yoga and recreation as part of recovery.",
+    "svc.aftercare.t": "Aftercare & follow-up",
+    "svc.aftercare.d":
+      "Ongoing follow-ups so recovery continues well after discharge.",
+    "gallery.eyebrow": "Inside Nila",
+    "gallery.title": "A calm, healing space",
+    "g.photo": "Photo placeholder",
+    "g.rooms": "Calm inpatient rooms",
+    "g.therapy": "Therapy & counselling",
+    "g.hall": "Group activity hall",
+    "g.garden": "Landscaped garden",
+    "g.yoga": "Yoga & recreation",
+    "g.family": "Family visiting area",
+    "tt.eyebrow": "A settled routine",
+    "tt.title": "Patient daily timetable",
+    "tt.sub": "A calm, predictable day — structure is part of recovery.",
+    "tt.note": "A sample ward routine — actual timings vary by care plan.",
+    "tt.wake": "Wake-up & freshen up",
+    "tt.walk": "Morning walk / yoga",
+    "tt.breakfast": "Breakfast",
+    "tt.med1": "Morning medication round",
+    "tt.therapy": "Therapy / counselling",
+    "tt.group": "Group activity",
+    "tt.lunch": "Lunch & rest",
+    "tt.skills": "Recreation / skills session",
+    "tt.physical": "Physical activity",
+    "tt.tea": "Evening tea",
+    "tt.family": "Counselling / family time",
+    "tt.dinner": "Dinner",
+    "tt.med2": "Night medication & wind-down",
+    "tt.lights": "Lights out",
+    "about.eyebrow": "About Nila",
+    "about.title": "Care rooted in empathy",
+    "about.body":
+      "Since 2010, Nila has supported more than 3,000 families through mental illness and recovery with calm, dignified care. Over 15 years of clinical experience and 35 years of trusted medical service are the foundation everything we do rests on.",
+    "about.quote":
+      "“We treat every patient the way we would want our own family to be cared for.”",
+    "about.by": "— The Nila Psychiatric Hospital team",
+    "contact.eyebrow": "Contact",
+    "contact.title": "Let's talk about your family",
+    "contact.sub":
+      "Tell us what you need — we'll suggest the right care and answer every question, in confidence.",
+    "contact.call": "Call us",
+    "contact.whatsapp": "WhatsApp",
+    "contact.email": "Email",
+    "contact.area": "Service area",
+    "contact.areaval": "Serving families across Tamil Nadu",
+    "form.name": "Your name",
+    "form.phone": "Phone number",
+    "form.msg": "How can we help?",
+    "form.send": "Send enquiry",
+    "form.ok": "Thank you — we'll call you back shortly.",
+    "footer.tag": "Compassionate psychiatric care · Care with experience",
+    "login.title": "Staff login",
+    "login.sub": "Sign in to the Nila staff portal.",
+    "login.email": "Email",
+    "login.pass": "Password",
+    "login.signin": "Sign in",
+    "login.signingin": "Signing in…",
+    "login.recaptcha":
+      "Protected by reCAPTCHA v3 — the Google Privacy Policy and Terms apply.",
+  },
+  ta: {
+    "nav.focus": "பராமரிப்பு பிரிவுகள்",
+    "nav.services": "சேவைகள்",
+    "nav.gallery": "படத்தொகுப்பு",
+    "nav.timetable": "நாள் அட்டவணை",
+    "nav.contact": "தொடர்பு",
+    "nav.login": "உள்நுழைவு",
+    "hero.eyebrow": "கருணையான மனநல பராமரிப்பு · 2010 முதல்",
+    "hero.title": "மனதிற்கு ஒரு அமைதியான புகலிடம்.",
+    "hero.lede":
+      "உள்நோயாளர் மனநல சிகிச்சை, போதைப் பழக்க விடுதலை மற்றும் மறுவாழ்வு — ஒவ்வொரு குடும்பத்திற்கும் உரிய அமைதி, தனியுரிமை மற்றும் கண்ணியத்துடன்.",
+    "hero.cta1": "ஆலோசனையை பதிவு செய்க",
+    "hero.cta2": "அழைக்க",
+    "stat.years": "ஆண்டுகள் பராமரிப்பு",
+    "stat.families": "குடும்பங்களுக்கு உதவி",
+    "stat.trust": "ஆண்டுகள் நம்பிக்கை",
+    "focus.eyebrow": "நாங்கள் சிகிச்சை அளிப்பவை",
+    "focus.title": "நாங்கள் கவனம் செலுத்தும் பராமரிப்பு பிரிவுகள்",
+    "fa.deaddiction.t": "போதை விடுதலை",
+    "fa.deaddiction.d":
+      "மது மற்றும் போதைப் பொருள் விடுதலைக்கு மருத்துவ மேற்பார்வையுடன் விஷநீக்கம் மற்றும் ஆலோசனை.",
+    "fa.mood.t": "மனச்சோர்வு & பதட்டம்",
+    "fa.mood.d":
+      "மனநிலை மற்றும் பதட்டக் கோளாறுகளுக்கு மதிப்பீடு, சிகிச்சை மற்றும் மருந்து.",
+    "fa.psychosis.t": "மனநோய் & ஸ்கிசோப்ரினியா",
+    "fa.psychosis.d":
+      "உள்நோயாளர் நிலைப்படுத்தல் மற்றும் தொடர்ச்சியான மதிப்பீட்டுடன் நீண்டகால ஆதரவு.",
+    "fa.geriatric.t": "முதியோர் & நினைவாற்றல்",
+    "fa.geriatric.d":
+      "மறதி நோய் மற்றும் முதுமை மனநலத்திற்கு பராமரிப்பு, குடும்ப வழிகாட்டலுடன்.",
+    "fa.counselling.t": "மன அழுத்தம் & ஆலோசனை",
+    "fa.counselling.d":
+      "மன அழுத்தம், தூக்கம் மற்றும் உறவு சிக்கல்களுக்கு பேச்சு சிகிச்சை.",
+    "fa.rehab.t": "மறுவாழ்வு",
+    "fa.rehab.d":
+      "அன்றாட வாழ்க்கைக்குத் திரும்ப திறன், வழக்கம் மற்றும் தொடர் பராமரிப்பு.",
+    "services.eyebrow": "எங்கள் சேவைகள்",
+    "services.title": "ஒவ்வொரு நோயாளியையும் நாங்கள் எப்படி பராமரிக்கிறோம்",
+    "services.sub":
+      "ஒரே அமைதியான கூரையின் கீழ் முழுமையான மருத்துவ மற்றும் மனிதப் பராமரிப்பு.",
+    "svc.inpatient.t": "உள்நோயாளர் பராமரிப்பு",
+    "svc.inpatient.d":
+      "24 மணிநேர செவிலியர் மற்றும் மருத்துவ மதிப்பீட்டுடன் பாதுகாப்பான வார்டுகள்.",
+    "svc.therapy.t": "சிகிச்சை & ஆலோசனை",
+    "svc.therapy.d":
+      "பயிற்சி பெற்ற நிபுணர்களால் தனிநபர், குழு மற்றும் குடும்ப சிகிச்சை.",
+    "svc.medication.t": "மருந்து மேலாண்மை",
+    "svc.medication.d":
+      "சரியான நேரத்தில் சரியான மருந்து, கண்காணித்து பாதுகாப்பாக.",
+    "svc.nutrition.t": "ஊட்டச்சத்து & நலம்",
+    "svc.nutrition.d":
+      "சமச்சீர் உணவு, யோகா மற்றும் பொழுதுபோக்கு மீட்பின் ஒரு பகுதி.",
+    "svc.aftercare.t": "தொடர் பராமரிப்பு",
+    "svc.aftercare.d":
+      "டிஸ்சார்ஜுக்குப் பின்னும் மீட்பு தொடர தொடர்ச்சியான பின்தொடர்தல்.",
+    "gallery.eyebrow": "நிலா உள்ளே",
+    "gallery.title": "அமைதியான, குணமளிக்கும் இடம்",
+    "g.photo": "படம் இடம்பிடிப்பான்",
+    "g.rooms": "அமைதியான உள்நோயாளர் அறைகள்",
+    "g.therapy": "சிகிச்சை & ஆலோசனை",
+    "g.hall": "குழு செயல்பாட்டு அரங்கம்",
+    "g.garden": "பசுமையான தோட்டம்",
+    "g.yoga": "யோகா & பொழுதுபோக்கு",
+    "g.family": "குடும்ப சந்திப்பு இடம்",
+    "tt.eyebrow": "ஒரு நிலையான வழக்கம்",
+    "tt.title": "நோயாளர் தினசரி அட்டவணை",
+    "tt.sub": "அமைதியான, முன்கூட்டியே தெரிந்த நாள் — ஒழுங்கு மீட்பின் ஒரு பகுதி.",
+    "tt.note":
+      "மாதிரி வார்டு வழக்கம் — உண்மையான நேரங்கள் பராமரிப்புத் திட்டத்தைப் பொறுத்து மாறும்.",
+    "tt.wake": "எழுந்து புத்துணர்ச்சி",
+    "tt.walk": "காலை நடை / யோகா",
+    "tt.breakfast": "காலை உணவு",
+    "tt.med1": "காலை மருந்து சுற்று",
+    "tt.therapy": "சிகிச்சை / ஆலோசனை",
+    "tt.group": "குழு செயல்பாடு",
+    "tt.lunch": "மதிய உணவு & ஓய்வு",
+    "tt.skills": "பொழுதுபோக்கு / திறன் அமர்வு",
+    "tt.physical": "உடற்பயிற்சி",
+    "tt.tea": "மாலை தேநீர்",
+    "tt.family": "ஆலோசனை / குடும்ப நேரம்",
+    "tt.dinner": "இரவு உணவு",
+    "tt.med2": "இரவு மருந்து & ஓய்வு",
+    "tt.lights": "விளக்கு அணைப்பு",
+    "about.eyebrow": "நிலா பற்றி",
+    "about.title": "பரிவில் வேரூன்றிய பராமரிப்பு",
+    "about.body":
+      "2010 முதல், 3,000-க்கும் மேற்பட்ட குடும்பங்களுக்கு மனநோய் மற்றும் மீட்பின் வழியாக நிலா அமைதியான, கண்ணியமான பராமரிப்பை வழங்கி வருகிறது. 15 ஆண்டுகளுக்கும் மேலான மருத்துவ அனுபவமும், 35 ஆண்டுகால நம்பிக்கையான மருத்துவச் சேவையும் எங்கள் அடித்தளம்.",
+    "about.quote":
+      "“எங்கள் சொந்தக் குடும்பத்தை எப்படிப் பராமரிக்க விரும்புவோமோ, அப்படியே ஒவ்வொரு நோயாளியையும் பராமரிக்கிறோம்.”",
+    "about.by": "— நிலா சைக்கியாட்ரிக் மருத்துவமனை குழு",
+    "contact.eyebrow": "தொடர்பு",
+    "contact.title": "உங்கள் குடும்பத்தைப் பற்றி பேசுவோம்",
+    "contact.sub":
+      "உங்கள் தேவையைச் சொல்லுங்கள் — ரகசியமாக சரியான பராமரிப்பைப் பரிந்துரைத்து, ஒவ்வொரு கேள்விக்கும் பதிலளிப்போம்.",
+    "contact.call": "எங்களை அழைக்கவும்",
+    "contact.whatsapp": "வாட்ஸ்அப்",
+    "contact.email": "மின்னஞ்சல்",
+    "contact.area": "சேவைப் பகுதி",
+    "contact.areaval": "தமிழ்நாடு முழுவதும் குடும்பங்களுக்கு சேவை",
+    "form.name": "உங்கள் பெயர்",
+    "form.phone": "தொலைபேசி எண்",
+    "form.msg": "எப்படி உதவலாம்?",
+    "form.send": "விசாரணை அனுப்பு",
+    "form.ok": "நன்றி — விரைவில் உங்களை அழைக்கிறோம்.",
+    "footer.tag": "கருணையான மனநல பராமரிப்பு · அனுபவத்துடன் அக்கறை",
+    "login.title": "பணியாளர் உள்நுழைவு",
+    "login.sub": "நிலா பணியாளர் போர்ட்டலில் உள்நுழையவும்.",
+    "login.email": "மின்னஞ்சல்",
+    "login.pass": "கடவுச்சொல்",
+    "login.signin": "உள்நுழை",
+    "login.signingin": "உள்நுழைகிறது…",
+    "login.recaptcha":
+      "reCAPTCHA v3 ஆல் பாதுகாக்கப்படுகிறது — Google தனியுரிமைக் கொள்கை மற்றும் விதிமுறைகள் பொருந்தும்.",
+  },
+};
