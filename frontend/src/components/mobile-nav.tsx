@@ -116,7 +116,7 @@ export function MobileNav() {
                   Nila Psychiatric
                 </div>
                 <div className="text-[11.5px] text-muted-foreground">
-                  Hospital · Kochi
+                  Hospital · Thanjavur
                 </div>
               </div>
               <button

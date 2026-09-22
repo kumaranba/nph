@@ -259,3 +259,54 @@ def test_follow_up_unknown_inquiry(pro_client):
     }})
     assert result["errors"]
     assert FollowUp.objects.count() == 0
+
+
+# --- completed follow-ups (date-range view) ---------------------------------
+
+COMPLETED = """
+query($from: Date, $to: Date) {
+  completedFollowUps(completedFrom: $from, completedTo: $to) {
+    id note completedOn isDone subjectName
+  }
+}
+"""
+
+
+def test_mark_done_stamps_completed_on(pro_client, follow_up):
+    pro_client.execute(MARK_DONE, {"id": str(follow_up.id)})
+    follow_up.refresh_from_db()
+    assert follow_up.is_done is True
+    assert follow_up.completed_on == date.today()
+
+
+def test_completed_list_returns_done_only(pro_client, patient):
+    done = FollowUp.objects.create(
+        patient=patient, note="done one", follow_up_date=date(2026, 1, 1),
+        is_done=True, completed_on=date(2026, 3, 10),
+    )
+    FollowUp.objects.create(
+        patient=patient, note="still open", follow_up_date=date(2026, 1, 1),
+    )
+    rows = pro_client.execute(COMPLETED, {})["data"]["completedFollowUps"]
+    ids = {r["id"] for r in rows}
+    assert ids == {str(done.id)}
+    assert rows[0]["completedOn"] == "2026-03-10"
+
+
+def test_completed_list_date_range(pro_client, patient):
+    for note, on in [("jan", date(2026, 1, 15)), ("mar", date(2026, 3, 15)),
+                     ("jun", date(2026, 6, 15))]:
+        FollowUp.objects.create(
+            patient=patient, note=note, follow_up_date=date(2026, 1, 1),
+            is_done=True, completed_on=on,
+        )
+    rows = pro_client.execute(
+        COMPLETED, {"from": "2026-02-01", "to": "2026-05-01"}
+    )["data"]["completedFollowUps"]
+    assert {r["note"] for r in rows} == {"mar"}
+
+
+def test_completed_list_forbidden_for_nurse(nurse_client, patient):
+    result = nurse_client.execute(COMPLETED, {})
+    assert result["data"] is None
+    assert "Permission denied" in result["errors"][0]["message"]

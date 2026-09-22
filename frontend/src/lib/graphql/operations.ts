@@ -123,8 +123,20 @@ export const PENDING_DUES_LIST = gql`
 
 // Discharged admissions — optional tag filter, sorted by discharge date.
 export const DISCHARGED_LIST = gql`
-  query DischargedList($tag: String, $sortDesc: Boolean) {
-    dischargedList(tag: $tag, sortDesc: $sortDesc) {
+  query DischargedList(
+    $tag: String
+    $search: String
+    $dischargedFrom: Date
+    $dischargedTo: Date
+    $sortDesc: Boolean
+  ) {
+    dischargedList(
+      tag: $tag
+      search: $search
+      dischargedFrom: $dischargedFrom
+      dischargedTo: $dischargedTo
+      sortDesc: $sortDesc
+    ) {
       id
       patientId
       name
@@ -133,6 +145,16 @@ export const DISCHARGED_LIST = gql`
       dischargeType
       room
       tags
+    }
+  }
+`;
+
+// Month-by-month discharged counts for the discharged-list summary.
+export const DISCHARGED_MONTHLY_SUMMARY = gql`
+  query DischargedMonthlySummary {
+    dischargedMonthlySummary {
+      month
+      count
     }
   }
 `;
@@ -827,8 +849,8 @@ export const DISCHARGE_PATIENT = gql`
 // --- PRM: inquiries -------------------------------------------------------
 
 export const INQUIRIES = gql`
-  query Inquiries($status: InquiryStatusEnum, $search: String) {
-    inquiries(status: $status, search: $search) {
+  query Inquiries($status: InquiryStatusEnum, $search: String, $pickupRequested: Boolean) {
+    inquiries(status: $status, search: $search, pickupRequested: $pickupRequested) {
       id
       name
       phone
@@ -837,6 +859,7 @@ export const INQUIRIES = gql`
       lostReason
       contactConsent
       doNotContact
+      pickupRequested
       consultedOn
       notes
       createdAt
@@ -1022,6 +1045,30 @@ export const DUE_FOLLOW_UPS = gql`
       note
       followUpDate
       kind
+      subjectName
+      patient {
+        id
+        patientId
+        name
+      }
+      inquiry {
+        id
+        name
+      }
+    }
+  }
+`;
+
+// Completed follow-ups, most recently completed first, optionally within a
+// completed-on date range.
+export const COMPLETED_FOLLOW_UPS = gql`
+  query CompletedFollowUps($completedFrom: Date, $completedTo: Date) {
+    completedFollowUps(completedFrom: $completedFrom, completedTo: $completedTo) {
+      id
+      note
+      kind
+      followUpDate
+      completedOn
       subjectName
       patient {
         id

@@ -46,6 +46,7 @@ type Inquiry = {
   lostReason: string;
   contactConsent: string;
   doNotContact: boolean;
+  pickupRequested: boolean;
   consultedOn: string | null;
   notes: string;
   createdAt: string;
@@ -109,6 +110,7 @@ export default function InquiriesPage() {
   const me = useMe();
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [pickupOnly, setPickupOnly] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [linkTarget, setLinkTarget] = useState<Inquiry | null>(null);
@@ -128,7 +130,11 @@ export default function InquiriesPage() {
   const isWorklist = view === "worklist";
 
   const { data, loading, error, refetch } = useQuery<Result>(INQUIRIES, {
-    variables: { status: statusFilter || null, search: search || null },
+    variables: {
+      status: statusFilter || null,
+      search: search || null,
+      pickupRequested: pickupOnly || null,
+    },
     skip: !hasToken || !allowed || isWorklist,
     fetchPolicy: "cache-and-network",
   });
@@ -263,6 +269,15 @@ export default function InquiriesPage() {
                   placeholder="Name or phone…"
                 />
               </div>
+              <label className="flex h-9 items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={pickupOnly}
+                  onChange={(e) => setPickupOnly(e.target.checked)}
+                />
+                Pickup requested
+              </label>
             </div>
           ) : null}
 
@@ -276,7 +291,7 @@ export default function InquiriesPage() {
               description={
                 isWorklist
                   ? "No consulted outpatients are pending conversion."
-                  : statusFilter || search
+                  : statusFilter || search || pickupOnly
                     ? "No inquiries match your filters."
                     : "No inquiries logged yet."
               }
@@ -314,6 +329,11 @@ export default function InquiriesPage() {
                         {r.doNotContact ? (
                           <span className="ml-2 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
                             Do not contact
+                          </span>
+                        ) : null}
+                        {r.pickupRequested ? (
+                          <span className="ml-2 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                            Pickup
                           </span>
                         ) : null}
                         {r.phone ? (

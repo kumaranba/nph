@@ -264,3 +264,47 @@ def test_update_inquiry_forbidden_for_non_pro(request, client_name, inquiry):
     assert result["errors"]
     inquiry.refresh_from_db()
     assert inquiry.phone == "9876543210"
+
+
+# --- pickup requested -------------------------------------------------------
+
+PICKUP_CREATE = """
+mutation($data: CreateInquiryInput!) {
+  createInquiry(data: $data) { id pickupRequested }
+}
+"""
+
+PICKUP_LIST = """
+query($pickup: Boolean) {
+  inquiries(pickupRequested: $pickup) { name pickupRequested }
+}
+"""
+
+
+def test_create_inquiry_sets_pickup_requested(pro_client):
+    result = pro_client.execute(
+        PICKUP_CREATE,
+        {"data": {"name": "Needs pickup", "source": "PHONE", "pickupRequested": True}},
+    )
+    assert result.get("errors") is None
+    assert result["data"]["createInquiry"]["pickupRequested"] is True
+    assert Inquiry.objects.get(name="Needs pickup").pickup_requested is True
+
+
+def test_create_inquiry_pickup_defaults_false(pro_client):
+    result = pro_client.execute(
+        PICKUP_CREATE, {"data": {"name": "No pickup", "source": "PHONE"}}
+    )
+    assert result["data"]["createInquiry"]["pickupRequested"] is False
+
+
+def test_inquiries_filter_pickup_requested(pro_client, db):
+    Inquiry.objects.create(name="Pick", source="PHONE", pickup_requested=True)
+    Inquiry.objects.create(name="NoPick", source="PHONE", pickup_requested=False)
+    # Toggle on: only pickup leads.
+    only = pro_client.execute(PICKUP_LIST, {"pickup": True})
+    names = {r["name"] for r in only["data"]["inquiries"]}
+    assert names == {"Pick"}
+    # Toggle off / omitted: everyone.
+    everyone = pro_client.execute(PICKUP_LIST, {"pickup": None})
+    assert {"Pick", "NoPick"} <= {r["name"] for r in everyone["data"]["inquiries"]}
