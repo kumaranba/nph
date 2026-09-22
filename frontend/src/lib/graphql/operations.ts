@@ -159,6 +159,75 @@ export const DISCHARGED_MONTHLY_SUMMARY = gql`
   }
 `;
 
+// Active in-patients with an admin-set planned discharge date (vacancy forecast).
+export const PLANNED_DISCHARGE_LIST = gql`
+  query PlannedDischargeList(
+    $search: String
+    $plannedFrom: Date
+    $plannedTo: Date
+    $overdueOnly: Boolean
+  ) {
+    plannedDischargeList(
+      search: $search
+      plannedFrom: $plannedFrom
+      plannedTo: $plannedTo
+      overdueOnly: $overdueOnly
+    ) {
+      plannedDischargeDate
+      daysRemaining
+      isOverdue
+      admission {
+        id
+        admissionDate
+        patient {
+          id
+          patientId
+          name
+        }
+        bed {
+          id
+          label
+          room {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const PLANNED_DISCHARGE_OVERDUE_COUNT = gql`
+  query PlannedDischargeOverdueCount {
+    plannedDischargeOverdueCount
+  }
+`;
+
+export const SET_PLANNED_DISCHARGE_DATE = gql`
+  mutation SetPlannedDischargeDate($admissionId: ID!, $plannedDischargeDate: Date!) {
+    setPlannedDischargeDate(
+      admissionId: $admissionId
+      plannedDischargeDate: $plannedDischargeDate
+    ) {
+      id
+      plannedDischargeDate
+      isDischargeOverdue
+      daysUntilPlannedDischarge
+    }
+  }
+`;
+
+export const CLEAR_PLANNED_DISCHARGE_DATE = gql`
+  mutation ClearPlannedDischargeDate($admissionId: ID!) {
+    clearPlannedDischargeDate(admissionId: $admissionId) {
+      id
+      plannedDischargeDate
+      isDischargeOverdue
+      daysUntilPlannedDischarge
+    }
+  }
+`;
+
 // Only vacant beds — used to populate the admission form's bed picker.
 export const VACANT_BEDS = gql`
   query VacantBeds {
@@ -341,6 +410,9 @@ export const PATIENT = gql`
         status
         admissionDate
         dischargeDate
+        plannedDischargeDate
+        isDischargeOverdue
+        daysUntilPlannedDischarge
         dischargeType
         monthlyFee
         creditBalance

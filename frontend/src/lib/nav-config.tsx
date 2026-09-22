@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarCheck,
   CalendarClock,
+  CalendarX,
   ChartBar,
   ChefHat,
   Contact,
@@ -75,6 +76,14 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ["ADMIN", "FINANCE", "NURSE", "PRO"],
       },
       { label: "New admission", href: "/admissions/new", icon: UserPlus },
+      // Planned discharges: bed-vacancy forecast. ADMIN sets the dates; PRO
+      // views it to plan waiting-list admissions.
+      {
+        label: "Planned discharges",
+        href: "/planned-discharges",
+        icon: CalendarX,
+        roles: ["ADMIN", "PRO"],
+      },
       // PRO sees Discharged too — they work follow-ups off this list.
       {
         label: "Discharged",
