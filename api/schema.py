@@ -1168,6 +1168,16 @@ class ForceDischargeItem:
 
 
 @strawberry.type
+class PlannedDischargeItem:
+    """An active in-patient with an administration-set planned discharge date,
+    for the vacancy-forecast list."""
+    admission: 'AdmissionType'
+    planned_discharge_date: date
+    days_remaining: int      # days until the plan; negative = overdue
+    is_overdue: bool
+
+
+@strawberry.type
 class BirthdayItem:
     """An in-patient with a birthday today or in the next few days."""
     patient: 'PatientType'
@@ -2092,6 +2102,61 @@ class Query:
             ))
         return items
 
+    # Active in-patients with an administration-set planned discharge date —
+    # the bed-vacancy forecast. Soonest plan first. Optional name/ID search,
+    # planned-date range, and overdue-only filter. ADMIN + PRO (PRO works the
+    # waiting list / admission inquiries and needs upcoming vacancies).
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def planned_discharge_list(
+        self,
+        info: Info,
+        search: Optional[str] = None,
+        planned_from: Optional[date] = None,
+        planned_to: Optional[date] = None,
+        overdue_only: bool = False,
+    ) -> List[PlannedDischargeItem]:
+        today = _today()
+        qs = (
+            Admission.objects.filter(
+                status=AdmissionStatus.ACTIVE,
+                planned_discharge_date__isnull=False,
+            )
+            .select_related('patient', 'bed__room')
+            .order_by('planned_discharge_date', 'id')
+        )
+        term = (search or '').strip()
+        if term:
+            qs = qs.filter(
+                Q(patient__name__icontains=term)
+                | Q(patient__patient_id__icontains=term)
+            )
+        if planned_from is not None:
+            qs = qs.filter(planned_discharge_date__gte=planned_from)
+        if planned_to is not None:
+            qs = qs.filter(planned_discharge_date__lte=planned_to)
+        if overdue_only:
+            qs = qs.filter(planned_discharge_date__lt=today)
+        return [
+            PlannedDischargeItem(
+                admission=adm,
+                planned_discharge_date=adm.planned_discharge_date,
+                days_remaining=(adm.planned_discharge_date - today).days,
+                is_overdue=adm.planned_discharge_date < today,
+            )
+            for adm in qs
+        ]
+
+    # Count of active in-patients whose planned discharge date has passed, for
+    # the notification bell. ADMIN + PRO.
+    @strawberry.field
+    @require_roles(UserRole.ADMIN, UserRole.PRO)
+    def planned_discharge_overdue_count(self, info: Info) -> int:
+        return Admission.objects.filter(
+            status=AdmissionStatus.ACTIVE,
+            planned_discharge_date__lt=_today(),
+        ).count()
+
     # In-patients with a birthday today or within the next ``within_days`` days
     # (default 7), soonest first. Computed from date_of_birth; patients without
     # one are skipped. Any authenticated role.
@@ -2819,6 +2884,48 @@ class Mutation:
         permission.save(update_fields=['return_date'])
         return permission
 
+    # Set (add or edit / reset) an active admission's planned discharge date.
+    # ADMIN only. The date must be today-or-later and on/after the admission
+    # date. Editing an overdue plan to a new forward date is the "reset" flow.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def set_planned_discharge_date(
+        self, info: Info, admission_id: strawberry.ID, planned_discharge_date: date
+    ) -> AdmissionType:
+        try:
+            admission = Admission.objects.get(pk=admission_id)
+        except Admission.DoesNotExist:
+            raise GraphQLError('Admission not found.')
+        if admission.status != AdmissionStatus.ACTIVE:
+            raise GraphQLError(
+                'A planned discharge date applies only to active admissions.'
+            )
+        if planned_discharge_date < _today():
+            raise GraphQLError('Planned discharge date cannot be in the past.')
+        if planned_discharge_date < admission.admission_date:
+            raise GraphQLError(
+                'Planned discharge date cannot precede the admission date.'
+            )
+        admission.planned_discharge_date = planned_discharge_date
+        admission.save(update_fields=['planned_discharge_date'])
+        return admission
+
+    # Remove an active admission's planned discharge date (→ no plan), without
+    # discharging the patient. ADMIN only.
+    @strawberry.mutation
+    @require_roles(UserRole.ADMIN)
+    def clear_planned_discharge_date(
+        self, info: Info, admission_id: strawberry.ID
+    ) -> AdmissionType:
+        try:
+            admission = Admission.objects.get(pk=admission_id)
+        except Admission.DoesNotExist:
+            raise GraphQLError('Admission not found.')
+        if admission.planned_discharge_date is not None:
+            admission.planned_discharge_date = None
+            admission.save(update_fields=['planned_discharge_date'])
+        return admission
+
     # Admit an EXISTING patient (new admission for a zero-admission patient, or a
     # re-admission after discharge). ADMIN only. Creates a new Admission with its
     # own independent Fee (Fee invariant #8) — the prior admission's Fee history
@@ -3133,6 +3240,8 @@ class Mutation:
 
             admission.status = AdmissionStatus.DISCHARGED
             admission.discharge_date = d
+            # A discharged admission has no pending discharge plan.
+            admission.planned_discharge_date = None
             if discharge_type:
                 admission.discharge_type = discharge_type
             if discharge_notes:

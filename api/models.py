@@ -282,6 +282,10 @@ class Admission(models.Model):
         max_length=12, choices=AdmissionStatus.choices, default=AdmissionStatus.ACTIVE
     )
     discharge_date = models.DateField(null=True, blank=True)
+    # Administration's target discharge date for an active in-patient — used to
+    # forecast bed vacancies for waiting admissions. Null = no plan. Cleared to
+    # null on actual discharge. Only meaningful while status is ACTIVE.
+    planned_discharge_date = models.DateField(null=True, blank=True)
     discharge_type = models.CharField(
         max_length=15, choices=DischargeType.choices, blank=True
     )

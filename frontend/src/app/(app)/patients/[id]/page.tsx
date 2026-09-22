@@ -16,6 +16,7 @@ import { ConsentControl } from "@/components/consent-control";
 import { ContactActions } from "@/components/contact-actions";
 import { PatientFollowUpsPanel } from "@/components/patient-follow-ups-panel";
 import { PatientPermissionPanel } from "@/components/patient-permission-panel";
+import { PlannedDischargePanel } from "@/components/planned-discharge-panel";
 import { ReadmitModal } from "@/components/readmit-modal";
 import { formatDate } from "@/lib/format-date";
 import { PatientTagsPanel } from "@/components/patient-tags-panel";
@@ -41,6 +42,9 @@ type Admission = {
   status: string;
   admissionDate: string;
   dischargeDate: string | null;
+  plannedDischargeDate: string | null;
+  isDischargeOverdue: boolean;
+  daysUntilPlannedDischarge: number | null;
   dischargeType: string;
   effectiveFee: { amount: string } | null;
   outstandingDue: string;
@@ -235,6 +239,18 @@ export default function PatientProfilePage() {
               </dl>
 
               <AdmissionHistory admissions={patient.admissions} />
+
+              {activeAdmission ? (
+                <PlannedDischargePanel
+                  admissionId={activeAdmission.id}
+                  plannedDischargeDate={activeAdmission.plannedDischargeDate}
+                  isDischargeOverdue={activeAdmission.isDischargeOverdue}
+                  daysUntilPlannedDischarge={
+                    activeAdmission.daysUntilPlannedDischarge
+                  }
+                  canManage={role === "ADMIN"}
+                />
+              ) : null}
 
               {activeAdmission ? (
                 <PatientPermissionPanel

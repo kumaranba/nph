@@ -122,6 +122,7 @@ class AdmissionType:
     monthly_fee: auto
     status: auto
     discharge_date: auto
+    planned_discharge_date: auto
     discharge_type: auto
     discharge_notes: auto
     refund_amount: auto
@@ -170,6 +171,24 @@ class AdmissionType:
         if active is not None:
             return active
         return self.fees.order_by('-effective_from', '-created_at').first()
+
+    # True when an active admission's planned discharge date has passed —
+    # the "discharge due" highlight. False if no plan or already discharged.
+    @strawberry.field
+    def is_discharge_overdue(self) -> bool:
+        return (
+            self.status == models.AdmissionStatus.ACTIVE
+            and self.planned_discharge_date is not None
+            and self.planned_discharge_date < date.today()
+        )
+
+    # Days from today until the planned discharge (negative = overdue by N).
+    # None when no plan is set.
+    @strawberry.field
+    def days_until_planned_discharge(self) -> Optional[int]:
+        if self.planned_discharge_date is None:
+            return None
+        return (self.planned_discharge_date - date.today()).days
 
     # Total still owed on this admission across its unpaid/partial invoices.
     # A discharged admission reads 0 (discharge clears all dues).
